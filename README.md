@@ -131,14 +131,11 @@ npm run scrape:depth2 1026900
 npm run scrape:unlimited 1026900
 ```
 
-**Alternative methods:**
+**Alternative method:**
 
 ```bash
-# Using npm with -- separator (Linux/macOS)
+# Using npm with -- separator
 npm run scrape -- start 1026900 --max-depth 1
-
-# Using npx directly (works on all platforms)
-npx tsx src/cli/scrape.ts start 1026900 --max-depth 1
 ```
 
 **Depth levels explained:**
@@ -161,7 +158,7 @@ Control the maximum number of players to scrape using the `--limit` option:
 npm run scrape -- start 1026900 --max-depth 1 --limit 3
 
 # Scrape 10 players from the network
-npx tsx src/cli/scrape.ts start 1026900 --max-depth 2 --limit 10
+npm run scrape -- start 1026900 --max-depth 2 --limit 10
 
 # No limit (scrape until depth is exhausted)
 npm run scrape -- start 1026900 --max-depth 1 --limit -1
@@ -181,10 +178,10 @@ npm run scrape -- start 1026900 --max-depth 0
 npm run scrape -- start 1026900 --max-depth 1 --limit 3
 
 # Medium test: 20 players maximum, depth 2
-npx tsx src/cli/scrape.ts start 1026900 --max-depth 2 --limit 20
+npm run scrape -- start 1026900 --max-depth 2 --limit 20
 
 # Large test: 100 players maximum, unlimited depth
-npx tsx src/cli/scrape.ts start 1026900 --max-depth -1 --limit 100
+npm run scrape -- start 1026900 --max-depth -1 --limit 100
 ```
 
 **Progress tracking:**
@@ -235,6 +232,32 @@ npm run db:migrate
 Push schema changes directly to database (development only):
 ```bash
 npm run db:push
+```
+
+**Clear and reset database (DELETES ALL DATA):**
+
+This is useful when:
+- You want to start fresh after bug fixes (e.g., after fixing duplicate match issues)
+- Testing with clean data
+- Database is corrupted
+
+```bash
+# First, see the warning
+npm run scrape clear-db
+
+# Then confirm with --force flag
+npm run scrape clear-db -- --force
+```
+
+**What it does:**
+1. Deletes the database file (`data/cztenis.db`)
+2. Recreates the schema automatically
+3. Leaves you with a clean, empty database
+
+**After clearing:**
+```bash
+# Start scraping from scratch
+npm run scrape -- start 1026900 --max-depth 1 --limit 10
 ```
 
 ## Project Structure

@@ -7,6 +7,9 @@ import { logger } from '../utils/logger';
 import { db } from '../database';
 import { scrapeQueue } from '../database/schema';
 import { eq } from 'drizzle-orm';
+import { config } from '../config';
+import * as fs from 'fs';
+import * as path from 'path';
 
 program
     .command('start')
@@ -93,6 +96,56 @@ program
     .action(async () => {
         const result = await db.delete(scrapeQueue).run();
         logger.info(`Cleared entire scrape queue. Deleted ${result.changes} items.`);
+    });
+
+program
+    .command('clear-db')
+    .description('Delete database and recreate schema (DELETES ALL DATA!)')
+    .option('--force', 'Skip confirmation prompt')
+    .action(async (options?: { force?: boolean }) => {
+        // Safety check
+        if (!options?.force) {
+            console.log('\n⚠️  WARNING: This will DELETE ALL DATA in the database!');
+            console.log('   - All players');
+            console.log('   - All matches');
+            console.log('   - All tournaments');
+            console.log('   - All scrape queue items');
+            console.log('\n💡 To proceed, run: npm run scrape clear-db -- --force\n');
+            process.exit(0);
+        }
+
+        try {
+            const dbPath = config.dbPath;
+
+            // Check if database exists
+            if (fs.existsSync(dbPath)) {
+                logger.info(`Deleting database at ${dbPath}...`);
+                fs.unlinkSync(dbPath);
+                logger.info('Database deleted successfully');
+            } else {
+                logger.info('Database file does not exist, nothing to delete');
+            }
+
+            // Recreate schema using drizzle-kit push
+            logger.info('Recreating database schema...');
+            const { execSync } = require('child_process');
+
+            try {
+                execSync('npm run db:push', {
+                    stdio: 'inherit',
+                    cwd: path.resolve(__dirname, '../..')
+                });
+                logger.info('✅ Database cleared and schema recreated successfully!');
+                console.log('\n📝 You can now start fresh with: npm run scrape start <playerId>\n');
+            } catch (error) {
+                logger.error('Failed to recreate schema. Please run manually: npm run db:push');
+                process.exit(1);
+            }
+
+        } catch (error) {
+            logger.error('Error clearing database', { error });
+            process.exit(1);
+        }
     });
 
 program.parse();
