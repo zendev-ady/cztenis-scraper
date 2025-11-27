@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import { parseScore } from '../../utils/score-parser';
+import { determineWinnerFromScore, isWalkoverScore } from '../../utils/score-winner';
 import { logger } from '../../utils/logger';
 
 export interface ParsedMatch {
@@ -104,7 +105,9 @@ export function parseMatches(html: string, scrapedPlayerId: number): ParsedMatch
             const meInRight = rightPlayers.some(p => p.isMe);
             if (!meInLeft && !meInRight) return;
 
-            const isWinner = meInLeft;
+            // Determine winner from score, not from position!
+            // Score format: "6:3, 6:4" where first number is left player's games
+            const isWinner = determineWinnerFromScore(fullScore, meInLeft);
 
             let opponentId: number | undefined;
             let opponentName: string | undefined;

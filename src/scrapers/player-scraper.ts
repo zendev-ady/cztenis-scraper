@@ -140,16 +140,37 @@ export class PlayerScraper {
                                 continue;
                             }
 
-                            // Save Match
+                            // Normalize player order: player1Id should always be the smaller ID
+                            // This prevents duplicate entries when scraping from both players' perspectives
+                            const allPlayerIds = [playerId, match.opponentId];
+                            const sortedPlayerIds = allPlayerIds.sort((a, b) => a - b);
+
+                            // For doubles, also normalize partner order
+                            let normalizedPlayer1PartnerId: number | undefined;
+                            let normalizedPlayer2PartnerId: number | undefined;
+
+                            if (match.matchType === 'doubles') {
+                                // If playerId is player1 (smaller ID)
+                                if (playerId === sortedPlayerIds[0]) {
+                                    normalizedPlayer1PartnerId = match.partnerId;
+                                    normalizedPlayer2PartnerId = match.opponentPartnerId;
+                                } else {
+                                    // playerId is player2, so swap
+                                    normalizedPlayer1PartnerId = match.opponentPartnerId;
+                                    normalizedPlayer2PartnerId = match.partnerId;
+                                }
+                            }
+
+                            // Save Match with normalized player order
                             await this.matchRepo.create({
                                 tournamentId: match.tournamentId,
                                 matchType: match.matchType,
                                 competitionType: match.competitionType,
                                 round: match.round,
-                                player1Id: match.isWinner ? playerId : match.opponentId,
-                                player2Id: match.isWinner ? match.opponentId : playerId,
-                                player1PartnerId: match.isWinner ? match.partnerId : match.opponentPartnerId,
-                                player2PartnerId: match.isWinner ? match.opponentPartnerId : match.partnerId,
+                                player1Id: sortedPlayerIds[0],
+                                player2Id: sortedPlayerIds[1],
+                                player1PartnerId: normalizedPlayer1PartnerId,
+                                player2PartnerId: normalizedPlayer2PartnerId,
 
                                 score: match.score,
                                 isWalkover: match.isWalkover,
