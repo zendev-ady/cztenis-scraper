@@ -21,6 +21,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "axios": "^1.13.2",
+    "axios-cookiejar-support": "^6.0.5",
     "better-sqlite3": "^11.5.0",
     "cheerio": "^1.0.0",
     "commander": "^14.0.2",
@@ -30,6 +32,7 @@
     "express": "^5.1.0",
     "p-queue": "^8.0.1",
     "playwright": "^1.48.2",
+    "tough-cookie": "^6.0.0",
     "winston": "^3.16.0"
   },
   "devDependencies": {

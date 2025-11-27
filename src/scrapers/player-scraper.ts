@@ -1,233 +1,193 @@
-import { Browser, chromium } from 'playwright';
 import { config } from '../config';
 import { logger } from '../utils/logger';
-import { parsePlayerProfile, parseSeasonOptions } from './parsers/player-parser';
-import { parseMatches } from './parsers/match-parser';
+import { HttpClient } from './http-client';
 import { PlayerRepository } from '../database/repositories/player.repo';
 import { MatchRepository } from '../database/repositories/match.repo';
 import { TournamentRepository } from '../database/repositories/tournament.repo';
 import { QueueManager } from '../services/queue-manager';
-import { setTimeout } from 'timers/promises';
+import { AdaptiveRateLimiter } from '../utils/adaptive-rate-limiter';
+import { QualityMonitor } from '../services/quality-monitor';
+import { validateMatch } from '../validators/match-validator';
 
 export class PlayerScraper {
-    private browser: Browser | null = null;
+    private httpClient: HttpClient;
     private playerRepo: PlayerRepository;
     private matchRepo: MatchRepository;
     private tournamentRepo: TournamentRepository;
     private queueManager: QueueManager;
-    private pagesProcessed: number = 0;
-    private readonly MAX_PAGES_PER_BROWSER = 50; // Recreate browser after 50 pages to prevent memory issues
+    private rateLimiter: AdaptiveRateLimiter;
+    private qualityMonitor: QualityMonitor;
 
-    constructor(queueManager: QueueManager) {
+    constructor(queueManager: QueueManager, qualityMonitor?: QualityMonitor) {
+        this.httpClient = new HttpClient();
         this.playerRepo = new PlayerRepository();
         this.matchRepo = new MatchRepository();
         this.tournamentRepo = new TournamentRepository();
         this.queueManager = queueManager;
+        this.rateLimiter = new AdaptiveRateLimiter();
+        this.qualityMonitor = qualityMonitor || new QualityMonitor();
     }
 
     async init() {
-        this.browser = await chromium.launch({ headless: true });
-        this.pagesProcessed = 0;
-        logger.info('Browser initialized');
+        logger.info('HTTP-based scraper initialized');
     }
 
     async close() {
-        if (this.browser) {
-            await this.browser.close();
-            this.browser = null;
-            logger.info('Browser closed');
-        }
-    }
-
-    async ensureBrowserHealthy() {
-        // Check if browser needs to be recreated
-        if (this.pagesProcessed >= this.MAX_PAGES_PER_BROWSER) {
-            logger.info(`Recycling browser after ${this.pagesProcessed} pages`);
-            await this.close();
-            await this.init();
-        }
-
-        // Check if browser is still connected
-        if (this.browser && !this.browser.isConnected()) {
-            logger.warn('Browser disconnected, recreating...');
-            await this.close();
-            await this.init();
-        }
+        await this.httpClient.close();
+        logger.info('HTTP client closed');
     }
 
     async scrapePlayer(playerId: number, currentDepth: number = 0) {
-        if (!this.browser) {
-            await this.init();
-        }
-
-        await this.ensureBrowserHealthy();
-
-        let context;
-        let page;
-
         try {
-            context = await this.browser!.newContext({ userAgent: config.userAgent });
-            page = await context.newPage();
+            logger.info(`Scraping player ${playerId}`);
 
-            const url = `${config.baseUrl}/hrac/${playerId}`;
-            logger.info(`Navigating to ${url}`);
+            // 1. Fetch initial player page
+            await this.rateLimiter.waitForNextRequest();
 
-            await page.goto(url, { timeout: config.timeout });
+            const { playerInfo, seasons } = await this.httpClient.fetchPlayerPage(playerId);
+            this.rateLimiter.onSuccess();
 
-            this.pagesProcessed++;
-
-            // 1. Parse Basic Info
-            const html = await page.content();
-            const playerInfo = parsePlayerProfile(html);
-
+            // 2. Save player info
             await this.playerRepo.upsert({
                 id: playerId,
                 ...playerInfo,
             });
 
-            // 2. Get Seasons
-            const seasons = parseSeasonOptions(html);
-            logger.info(`Found ${seasons.length} seasons for player ${playerId}`);
+            logger.info(`Player ${playerId} (${playerInfo.name}): found ${seasons.length} seasons`);
 
-            // 3. Iterate Seasons
+            let totalMatches = 0;
+
+            // 3. Iterate through each season
             for (const season of seasons) {
-                logger.info(`Scraping season ${season.label} (${season.value}) for player ${playerId}`);
-
-                // Ensure season exists in DB
-                await this.tournamentRepo.ensureSeason(season.value, season.label);
-
-                // Switch season via POST
                 try {
-                    // Check if season select element exists
-                    const seasonSelect = await page.$('select[name="sezona"]');
-                    if (!seasonSelect) {
-                        logger.warn(`Season select not found for player ${playerId}, skipping season ${season.value}`);
-                        continue;
-                    }
+                    logger.info(`Scraping season ${season.label} (${season.value}) for player ${playerId}`);
 
-                    // If the option is already selected, we might not need to do anything, but let's be robust.
-                    const isSelected = await page.$eval(`select[name="sezona"] option[value="${season.value}"]`, (el: any) => el.selected);
+                    // Ensure season exists in DB
+                    await this.tournamentRepo.ensureSeason(season.value, season.label);
 
-                    if (!isSelected) {
-                        await page.selectOption('select[name="sezona"]', season.value);
-                        
-                        // Check if submit button exists before clicking
-                        const submitButton = await page.$('button[type="submit"]');
-                        if (submitButton) {
-                            await Promise.all([
-                                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: config.timeout }),
-                                page.click('button[type="submit"]'),
-                            ]);
-                        } else {
-                            logger.warn(`Submit button not found for season ${season.value}, waiting for page reload`);
-                            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: config.timeout });
-                        }
-                    }
-                    
-                    logger.debug(`Successfully switched to season ${season.value} for player ${playerId}`);
-                } catch (e) {
-                    logger.error(`Failed to switch season ${season.value} for player ${playerId}`, { error: e });
-                    // Continue to try parsing anyway, sometimes the page loads without explicit season switching
-                }
+                    // Fetch season data via POST
+                    await this.rateLimiter.waitForNextRequest();
 
-                // 4. Parse Matches
-                const seasonHtml = await page.content();
-                const matches = parseMatches(seasonHtml, playerId);
-                logger.info(`Found ${matches.length} matches in season ${season.label}`);
+                    const { matches } = await this.httpClient.fetchSeasonData(playerId, season.value);
+                    this.rateLimiter.onSuccess();
 
-                for (const match of matches) {
-                    try {
-                        // Skip matches without valid opponent (can happen with walkovers or parsing issues)
-                        if (!match.opponentId) {
-                            logger.warn(`Skipping match without opponent ID for player ${playerId} in tournament ${match.tournamentId}`);
-                            continue;
-                        }
+                    logger.info(`Season ${season.label}: found ${matches.length} matches`);
+                    totalMatches += matches.length;
 
-                        // Save Tournament
-                        await this.tournamentRepo.upsert({
-                            id: match.tournamentId,
-                            name: match.tournamentName,
-                            date: match.tournamentDate,
-                            seasonCode: season.value,
-                        });
+                    this.qualityMonitor.recordSeason(season.value, matches.length);
 
-                        // Ensure players exist before creating match
-                        const nextDepth = currentDepth + 1;
+                    // 4. Process each match
+                    for (const match of matches) {
+                        try {
+                            // Validate match
+                            const validation = validateMatch(match);
+                            this.qualityMonitor.recordMatch(match, validation);
 
-                        // Upsert opponent player
-                        await this.playerRepo.upsert({
-                            id: match.opponentId,
-                            name: match.opponentName || 'Unknown',
-                        });
-                        await this.queueManager.addPlayer(match.opponentId, 0, false, nextDepth, playerId);
+                            // Skip invalid matches (unless it's just warnings)
+                            if (!validation.isValid) {
+                                logger.warn(`Skipping invalid match for player ${playerId} in tournament ${match.tournamentId}`, {
+                                    errors: validation.errors,
+                                });
+                                continue;
+                            }
 
-                        // Upsert partner if it's doubles
-                        if (match.partnerId) {
-                            await this.playerRepo.upsert({
-                                id: match.partnerId,
-                                name: match.partnerName || 'Unknown'
+                            // Skip matches without valid opponent (can happen with walkovers or parsing issues)
+                            if (!match.opponentId) {
+                                logger.warn(`Skipping match without opponent ID for player ${playerId} in tournament ${match.tournamentId}`);
+                                continue;
+                            }
+
+                            // Save Tournament
+                            await this.tournamentRepo.upsert({
+                                id: match.tournamentId,
+                                name: match.tournamentName,
+                                date: match.tournamentDate,
+                                seasonCode: season.value,
                             });
-                            await this.queueManager.addPlayer(match.partnerId, 0, false, nextDepth, playerId);
-                        }
 
-                        // Upsert opponent partner if it's doubles
-                        if (match.opponentPartnerId) {
+                            // Ensure players exist before creating match
+                            const nextDepth = currentDepth + 1;
+
+                            // Upsert opponent player
                             await this.playerRepo.upsert({
-                                id: match.opponentPartnerId,
-                                name: match.opponentPartnerName || 'Unknown'
+                                id: match.opponentId,
+                                name: match.opponentName || 'Unknown',
                             });
-                            await this.queueManager.addPlayer(match.opponentPartnerId, 0, false, nextDepth, playerId);
+                            await this.queueManager.addPlayer(match.opponentId, 0, false, nextDepth, playerId);
+
+                            // Upsert partner if it's doubles
+                            if (match.partnerId) {
+                                await this.playerRepo.upsert({
+                                    id: match.partnerId,
+                                    name: match.partnerName || 'Unknown'
+                                });
+                                await this.queueManager.addPlayer(match.partnerId, 0, false, nextDepth, playerId);
+                            }
+
+                            // Upsert opponent partner if it's doubles
+                            if (match.opponentPartnerId) {
+                                await this.playerRepo.upsert({
+                                    id: match.opponentPartnerId,
+                                    name: match.opponentPartnerName || 'Unknown'
+                                });
+                                await this.queueManager.addPlayer(match.opponentPartnerId, 0, false, nextDepth, playerId);
+                            }
+
+                            // Verify that the main opponent player was successfully created/updated
+                            const opponentExists = await this.playerRepo.findById(match.opponentId);
+                            if (!opponentExists) {
+                                logger.error(`Failed to ensure opponent player ${match.opponentId} exists, skipping match`);
+                                continue;
+                            }
+
+                            // Save Match
+                            await this.matchRepo.create({
+                                tournamentId: match.tournamentId,
+                                matchType: match.matchType,
+                                competitionType: match.competitionType,
+                                round: match.round,
+                                player1Id: match.isWinner ? playerId : match.opponentId,
+                                player2Id: match.isWinner ? match.opponentId : playerId,
+                                player1PartnerId: match.isWinner ? match.partnerId : match.opponentPartnerId,
+                                player2PartnerId: match.isWinner ? match.opponentPartnerId : match.partnerId,
+
+                                score: match.score,
+                                isWalkover: match.isWalkover,
+                                winnerId: match.isWinner ? playerId : match.opponentId,
+                                pointsEarned: match.pointsEarned,
+                                matchDate: match.tournamentDate,
+                            });
+
+                            logger.debug(`Successfully saved match: ${playerId} vs ${match.opponentId} in tournament ${match.tournamentId}`);
+                        } catch (error) {
+                            logger.error(`Failed to save match for player ${playerId}: ${JSON.stringify(match)}`, { error });
+                            // Continue with next match instead of failing the entire season
                         }
-
-                        // Verify that the main opponent player was successfully created/updated
-                        const opponentExists = await this.playerRepo.findById(match.opponentId);
-                        if (!opponentExists) {
-                            logger.error(`Failed to ensure opponent player ${match.opponentId} exists, skipping match`);
-                            continue;
-                        }
-
-                        // Save Match
-                        await this.matchRepo.create({
-                            tournamentId: match.tournamentId,
-                            matchType: match.matchType,
-                            competitionType: match.competitionType,
-                            round: match.round,
-                            player1Id: match.isWinner ? playerId : match.opponentId,
-                            player2Id: match.isWinner ? match.opponentId : playerId,
-                            player1PartnerId: match.isWinner ? match.partnerId : match.opponentPartnerId,
-                            player2PartnerId: match.isWinner ? match.opponentPartnerId : match.partnerId,
-
-                            score: match.score,
-                            isWalkover: match.isWalkover,
-                            winnerId: match.isWinner ? playerId : match.opponentId,
-                            pointsEarned: match.pointsEarned,
-                            matchDate: match.tournamentDate,
-                        });
-                        
-                        logger.debug(`Successfully saved match: ${playerId} vs ${match.opponentId} in tournament ${match.tournamentId}`);
-                    } catch (error) {
-                        logger.error(`Failed to save match for player ${playerId}: ${JSON.stringify(match)}`, { error });
-                        // Continue with next match instead of failing the entire season
                     }
+                } catch (error) {
+                    logger.error(`Failed to scrape season ${season.value} for player ${playerId}`, { error });
+                    this.rateLimiter.onError();
+                    // Continue with next season instead of failing the entire player
                 }
-
-                // Delay between seasons to be nice
-                await setTimeout(config.requestDelay);
             }
 
             // Update last scraped
             await this.playerRepo.updateLastScraped(playerId);
+            this.qualityMonitor.recordPlayer(playerId, totalMatches);
+
+            logger.info(`Completed scraping player ${playerId}: ${totalMatches} total matches`);
 
         } catch (error) {
             logger.error(`Error scraping player ${playerId}`, { error });
+            this.rateLimiter.onError();
             throw error;
-        } finally {
-            if (page) {
-                await page.close().catch(err => logger.warn(`Failed to close page: ${err.message}`));
-            }
-            if (context) {
-                await context.close().catch(err => logger.warn(`Failed to close context: ${err.message}`));
-            }
         }
+    }
+
+    /**
+     * Get the quality monitor for reporting
+     */
+    getQualityMonitor(): QualityMonitor {
+        return this.qualityMonitor;
     }
 }

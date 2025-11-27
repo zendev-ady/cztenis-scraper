@@ -2,6 +2,7 @@ import { program } from 'commander';
 import { QueueManager } from '../services/queue-manager';
 import { PlayerScraper } from '../scrapers/player-scraper';
 import { PlayerRepository } from '../database/repositories/player.repo';
+import { QualityMonitor } from '../services/quality-monitor';
 import { logger } from '../utils/logger';
 import { db } from '../database';
 import { scrapeQueue } from '../database/schema';
@@ -15,10 +16,11 @@ program
     .option('--max-depth <depth>', 'Maximum crawl depth (-1 = unlimited, 0 = only specified player, 1 = player + opponents, etc.)', '-1')
     .action(async (playerId?: string, options?: { player?: string; maxDepth?: string }) => {
         const maxDepth = parseInt(options?.maxDepth || '-1', 10);
-        logger.info(`Starting scraper with max depth: ${maxDepth === -1 ? 'unlimited' : maxDepth}`);
+        logger.info(`Starting HTTP-based scraper with max depth: ${maxDepth === -1 ? 'unlimited' : maxDepth}`);
 
         const queueManager = new QueueManager(maxDepth);
-        const scraper = new PlayerScraper(queueManager);
+        const qualityMonitor = new QualityMonitor();
+        const scraper = new PlayerScraper(queueManager, qualityMonitor);
         await scraper.init();
 
         const playerIdToAdd = playerId || options?.player;
@@ -40,6 +42,11 @@ program
         process.on('SIGINT', async () => {
             logger.info('Shutting down gracefully...');
             queueManager.stop();
+
+            // Print quality report before shutdown
+            logger.info('Generating quality report...');
+            qualityMonitor.printReport();
+
             await scraper.close();
             process.exit(0);
         });
@@ -48,11 +55,22 @@ program
             await queueManager.processQueue(async (playerId, depth) => {
                 await scraper.scrapePlayer(playerId, depth);
             });
+
+            // Print final quality report
+            logger.info('Scraping completed! Generating quality report...');
+            qualityMonitor.printReport();
+
         } catch (error) {
             logger.error('Fatal error in scraper', { error });
+
+            // Print quality report even on error
+            qualityMonitor.printReport();
+
             await scraper.close();
             process.exit(1);
         }
+
+        await scraper.close();
     });
 
 program
