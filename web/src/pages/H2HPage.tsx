@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { searchPlayers, getH2H, Player, H2HData } from '../lib/api';
+import { searchPlayers, getH2H, type Player, type H2HData } from '../lib/api';
 
 export default function H2HPage() {
   const [player1Query, setPlayer1Query] = useState('');

@@ -1,4 +1,4 @@
-import { Browser, Page, chromium } from 'playwright';
+import { Browser, chromium } from 'playwright';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import { parsePlayerProfile, parseSeasonOptions } from './parsers/player-parser';
@@ -55,7 +55,7 @@ export class PlayerScraper {
         }
     }
 
-    async scrapePlayer(playerId: number) {
+    async scrapePlayer(playerId: number, currentDepth: number = 0) {
         if (!this.browser) {
             await this.init();
         }
@@ -152,31 +152,31 @@ export class PlayerScraper {
                         });
 
                         // Ensure players exist before creating match
-                        const playerUpserts = [];
-                        
+                        const nextDepth = currentDepth + 1;
+
                         // Upsert opponent player
-                        const opponentPlayer = await this.playerRepo.upsert({
+                        await this.playerRepo.upsert({
                             id: match.opponentId,
                             name: match.opponentName || 'Unknown',
                         });
-                        await this.queueManager.addPlayer(match.opponentId);
+                        await this.queueManager.addPlayer(match.opponentId, 0, false, nextDepth, playerId);
 
                         // Upsert partner if it's doubles
                         if (match.partnerId) {
-                            await this.playerRepo.upsert({ 
-                                id: match.partnerId, 
-                                name: match.partnerName || 'Unknown' 
+                            await this.playerRepo.upsert({
+                                id: match.partnerId,
+                                name: match.partnerName || 'Unknown'
                             });
-                            await this.queueManager.addPlayer(match.partnerId);
+                            await this.queueManager.addPlayer(match.partnerId, 0, false, nextDepth, playerId);
                         }
 
                         // Upsert opponent partner if it's doubles
                         if (match.opponentPartnerId) {
-                            await this.playerRepo.upsert({ 
-                                id: match.opponentPartnerId, 
-                                name: match.opponentPartnerName || 'Unknown' 
+                            await this.playerRepo.upsert({
+                                id: match.opponentPartnerId,
+                                name: match.opponentPartnerName || 'Unknown'
                             });
-                            await this.queueManager.addPlayer(match.opponentPartnerId);
+                            await this.queueManager.addPlayer(match.opponentPartnerId, 0, false, nextDepth, playerId);
                         }
 
                         // Verify that the main opponent player was successfully created/updated

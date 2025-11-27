@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { searchPlayers, Player } from '../lib/api';
+import { searchPlayers, type Player } from '../lib/api';
 
 export default function HomePage() {
   const [query, setQuery] = useState('');

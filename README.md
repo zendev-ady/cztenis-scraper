@@ -42,18 +42,73 @@ Start scraping from the queue or add a specific player:
 npm run scrape start
 
 # Add a specific player to the queue and start scraping
-npm run scrape start 12345
+npm run scrape start 1026900
 # or
-npm run scrape start --player 12345
+npm run scrape start --player 1026900
 ```
 
+#### Depth-Limited Scraping
+
+Control how deeply the scraper crawls through the player network using the `--max-depth` option:
+
+**Easy method (recommended for Windows):** Use pre-configured npm scripts:
+
+```bash
+# Scrape only the specified player (no opponents)
+npm run scrape:depth0 1026900
+
+# Scrape the player and their direct opponents only
+npm run scrape:depth1 1026900
+
+# Scrape the player, their opponents, and opponents' opponents
+npm run scrape:depth2 1026900
+
+# Unlimited depth (scrapes entire connected network)
+npm run scrape:unlimited 1026900
+```
+
+**Alternative methods:**
+
+```bash
+# Using npm with -- separator (Linux/macOS)
+npm run scrape -- start 1026900 --max-depth 1
+
+# Using npx directly (works on all platforms)
+npx tsx src/cli/scrape.ts start 1026900 --max-depth 1
+```
+
+**Depth levels explained:**
+- `depth 0`: Only the manually specified player
+- `depth 1`: The player + all their opponents (typically 5-50 players)
+- `depth 2`: All of the above + opponents of opponents (hundreds of players)
+- `depth -1`: Unlimited (entire connected network, potentially thousands of players)
+
+**Use cases:**
+- **Testing**: Use `--max-depth 0` or `--max-depth 1` for quick testing
+- **Targeted scraping**: Use `--max-depth 1` to get a player and their immediate competition
+- **Full dataset**: Use `--max-depth -1` for production scraping of the entire network
+
 ### Queue Management
+
+Check the current queue status and depth distribution:
+
+```bash
+npm run queue-status
+```
 
 Reset failed items in the queue back to pending status:
 
 ```bash
 npm run scrape reset-queue
 ```
+
+Clear the entire scrape queue (use before testing to ensure clean state):
+
+```bash
+npm run scrape clear-queue
+```
+
+**Important:** Always clear the queue before testing depth limits to avoid interference from previously queued players.
 
 ### Database Verification
 

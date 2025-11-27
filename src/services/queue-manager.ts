@@ -8,26 +8,40 @@ export class QueueManager {
     private queue: PQueue;
     private repo: ScrapeQueueRepository;
     private isRunning: boolean = false;
+    private maxDepth: number = -1; // -1 = unlimited
 
-    constructor() {
+    constructor(maxDepth: number = -1) {
         this.repo = new ScrapeQueueRepository();
         this.queue = new PQueue({
             concurrency: 1,
             interval: config.requestDelay,
             intervalCap: 1,
         });
+        this.maxDepth = maxDepth;
     }
 
-    async addPlayer(playerId: number, priority: number = 0, force: boolean = false) {
-        await this.repo.add(playerId, priority, force);
+    async addPlayer(
+        playerId: number,
+        priority: number = 0,
+        force: boolean = false,
+        depth: number = 0,
+        sourcePlayerId?: number
+    ) {
+        // Check if depth exceeds max depth
+        if (this.maxDepth >= 0 && depth > this.maxDepth) {
+            logger.debug(`Skipping player ${playerId} - depth ${depth} exceeds max depth ${this.maxDepth}`);
+            return;
+        }
+
+        await this.repo.add(playerId, priority, force, depth, sourcePlayerId);
         if (force) {
-            logger.info(`Force added player ${playerId} to queue with priority ${priority}`);
+            logger.info(`Force added player ${playerId} to queue with priority ${priority}, depth ${depth}`);
         } else {
-            logger.info(`Added player ${playerId} to queue with priority ${priority}`);
+            logger.info(`Added player ${playerId} to queue with priority ${priority}, depth ${depth}`);
         }
     }
 
-    async processQueue(processor: (playerId: number) => Promise<void>) {
+    async processQueue(processor: (playerId: number, depth: number) => Promise<void>) {
         if (this.isRunning) return;
         this.isRunning = true;
 
@@ -43,13 +57,13 @@ export class QueueManager {
             }
 
             await this.queue.add(async () => {
-                const { playerId } = nextItem;
+                const { playerId, depth } = nextItem;
 
                 try {
                     await this.repo.markProcessing(playerId);
-                    logger.info(`Processing player ${playerId}...`);
+                    logger.info(`Processing player ${playerId} (depth ${depth})...`);
 
-                    await processor(playerId);
+                    await processor(playerId, depth || 0);
 
                     await this.repo.markCompleted(playerId);
                     logger.info(`Completed player ${playerId}`);

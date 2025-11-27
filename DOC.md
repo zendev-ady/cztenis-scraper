@@ -217,10 +217,21 @@ CREATE TABLE scrape_queue (
     attempts INTEGER DEFAULT 0,        -- Number of retry attempts
     last_attempt_at INTEGER,           -- Last attempt timestamp
     error_message TEXT,                -- Error details if failed
+    depth INTEGER DEFAULT 0 NOT NULL,  -- Crawl depth (0=manual, 1=opponent, 2=opponent's opponent, etc.)
+    source_player_id INTEGER,          -- Player who added this to queue (NULL=manually added)
     created_at INTEGER DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(player_id)
 );
 ```
+
+**Depth Tracking:**
+The `depth` and `source_player_id` columns enable controlled crawling through the player network:
+- `depth = 0`: Manually added players (starting points)
+- `depth = 1`: Direct opponents of manually added players
+- `depth = 2`: Opponents of opponents
+- `depth = N`: N steps away from the starting player
+
+This prevents the exponential "snowball effect" where one player's 50 opponents each have 50 opponents, leading to thousands of players in the queue.
 
 ### Database Relationships
 
@@ -462,6 +473,7 @@ The queue management system is built around the [`QueueManager`](src/services/qu
 2. **Priority-Based Processing**: Higher priority items are processed first
 3. **Retry Logic**: Failed items can be retried with attempt tracking
 4. **Status Tracking**: Items move through states: pending → processing → completed/failed
+5. **Depth-Limited Crawling**: Controls how deeply the scraper explores the player network
 
 ### Queue Configuration
 
@@ -507,6 +519,59 @@ async processQueue(processor: (playerId: number) => Promise<void>) {
 3. **completed**: Item was successfully processed
 4. **failed**: Item failed processing and may be retried
 
+### Depth-Limited Crawling
+
+The queue manager implements depth tracking to prevent exponential queue growth:
+
+**Problem:** Without depth limiting, scraping one player leads to exponential growth:
+```
+Player A (1 player)
+  → 50 opponents (depth 1)
+    → 50 × 50 = 2,500 opponents (depth 2)
+      → 50 × 2,500 = 125,000 opponents (depth 3)
+```
+
+**Solution:** Configure maximum crawl depth:
+
+```typescript
+// Initialize with max depth
+const queueManager = new QueueManager(maxDepth);
+
+// Add player with depth tracking
+await queueManager.addPlayer(
+    playerId,        // Player ID
+    priority,        // Priority (default: 0)
+    force,           // Force re-scrape (default: false)
+    depth,           // Current depth (0 for manual)
+    sourcePlayerId   // Who added this player (optional)
+);
+```
+
+**Depth Levels:**
+- `maxDepth = -1`: Unlimited (default, scrapes entire connected network)
+- `maxDepth = 0`: Only manually specified players
+- `maxDepth = 1`: Player + direct opponents (typically 5-50 players)
+- `maxDepth = 2`: Player + opponents + opponents' opponents (hundreds)
+- `maxDepth = N`: N steps from starting player
+
+**Usage Example:**
+```bash
+# Testing: Scrape only one player
+npm run scrape start 1026900 --max-depth 0
+
+# Targeted: Player and their opponents
+npm run scrape start 1026900 --max-depth 1
+
+# Production: Unlimited depth
+npm run scrape start 1026900 --max-depth -1
+```
+
+**Implementation Details:**
+1. When a player is scraped, their opponents are added with `depth = currentDepth + 1`
+2. The queue manager checks if `depth > maxDepth` before adding to queue
+3. The `source_player_id` tracks which player caused this addition
+4. This allows analyzing the crawl graph and understanding player connections
+
 ## CLI Commands Documentation
 
 ### Scrape Command ([`scrape.ts`](src/cli/scrape.ts:1))
@@ -519,11 +584,18 @@ The CLI provides two main commands for scraping operations:
 ```bash
 npm run scrape start [playerId]
 npm run scrape start --player <playerId>
+npm run scrape start [playerId] --max-depth <depth>
 ```
+
+**Options:**
+- `[playerId]`: Optional player ID to add to queue
+- `--player <id>`: Alternative syntax for player ID
+- `--max-depth <depth>`: Maximum crawl depth (-1 = unlimited, 0 = only specified player, 1 = player + opponents, etc.)
 
 **Functionality:**
 - Starts queue processing if no player ID is provided
 - Adds a specific player to the queue and starts processing if ID is provided
+- Controls crawl depth to prevent exponential queue growth
 - Handles graceful shutdown on SIGINT (Ctrl+C)
 
 **Implementation:**
@@ -708,8 +780,10 @@ logger.debug(`Successfully saved match: ${playerId} vs ${opponentId}`);
 ✅ **Player Scraping**: Full player profile and match history extraction
 ✅ **Match Parsing**: Comprehensive match data extraction including scores and participants
 ✅ **Queue System**: Robust queue management with priority and retry logic
+✅ **Depth-Limited Crawling**: Configurable max depth to prevent exponential queue growth
 ✅ **Repository Layer**: Full CRUD operations for all entities
 ✅ **CLI Interface**: Complete command-line tools for scraping and management
+✅ **Queue Status Tool**: View queue depth distribution and statistics
 ✅ **Logging System**: Multi-level logging with file and console output
 ✅ **Browser Management**: Robust browser automation with error recovery
 ✅ **Season Handling**: Multi-season data collection with automatic season switching
