@@ -152,6 +152,44 @@ npx tsx src/cli/scrape.ts start 1026900 --max-depth 1
 - **Targeted scraping**: Use `--max-depth 1` to get a player and their immediate competition
 - **Full dataset**: Use `--max-depth -1` for production scraping of the entire network
 
+### Player Limit
+
+Control the maximum number of players to scrape using the `--limit` option:
+
+```bash
+# Scrape exactly 3 players (useful for quick testing)
+npm run scrape -- start 1026900 --max-depth 1 --limit 3
+
+# Scrape 10 players from the network
+npx tsx src/cli/scrape.ts start 1026900 --max-depth 2 --limit 10
+
+# No limit (scrape until depth is exhausted)
+npm run scrape -- start 1026900 --max-depth 1 --limit -1
+```
+
+**How it works:**
+- The scraper will stop after processing the specified number of players
+- Works in combination with `--max-depth` to control both breadth and depth
+- Default is `-1` (unlimited)
+
+**Examples:**
+```bash
+# Micro test: Just 1 player (the specified one)
+npm run scrape -- start 1026900 --max-depth 0
+
+# Small test: 3 players maximum, depth 1
+npm run scrape -- start 1026900 --max-depth 1 --limit 3
+
+# Medium test: 20 players maximum, depth 2
+npx tsx src/cli/scrape.ts start 1026900 --max-depth 2 --limit 20
+
+# Large test: 100 players maximum, unlimited depth
+npx tsx src/cli/scrape.ts start 1026900 --max-depth -1 --limit 100
+```
+
+**Progress tracking:**
+The scraper will display progress like `[2/3 processed]` when a limit is set, making it easy to monitor progress.
+
 ### Queue Management
 
 Check the current queue status and depth distribution:

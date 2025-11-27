@@ -14,11 +14,14 @@ program
     .argument('[playerId]', 'Optional player ID to add to queue')
     .option('--player <id>', 'Player ID to add to queue (alternative syntax)')
     .option('--max-depth <depth>', 'Maximum crawl depth (-1 = unlimited, 0 = only specified player, 1 = player + opponents, etc.)', '-1')
-    .action(async (playerId?: string, options?: { player?: string; maxDepth?: string }) => {
+    .option('--limit <count>', 'Maximum number of players to scrape (-1 = unlimited)', '-1')
+    .action(async (playerId?: string, options?: { player?: string; maxDepth?: string; limit?: string }) => {
         const maxDepth = parseInt(options?.maxDepth || '-1', 10);
-        logger.info(`Starting HTTP-based scraper with max depth: ${maxDepth === -1 ? 'unlimited' : maxDepth}`);
+        const maxPlayers = parseInt(options?.limit || '-1', 10);
 
-        const queueManager = new QueueManager(maxDepth);
+        logger.info(`Starting HTTP-based scraper with max depth: ${maxDepth === -1 ? 'unlimited' : maxDepth}, limit: ${maxPlayers === -1 ? 'unlimited' : maxPlayers} players`);
+
+        const queueManager = new QueueManager(maxDepth, maxPlayers);
         const qualityMonitor = new QualityMonitor();
         const scraper = new PlayerScraper(queueManager, qualityMonitor);
         await scraper.init();
