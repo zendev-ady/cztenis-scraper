@@ -1,73 +1,127 @@
-# React + TypeScript + Vite
+# CZTenis Scraper - Web Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React-based web interface for the CZTenis Scraper project. This application provides a user-friendly interface to view and manage Czech tennis player data, match results, and tournament statistics.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Player profile browsing and search
+- Match history visualization
+- Head-to-head (H2H) statistics comparison
+- Tournament data display
+- Player rankings overview
+- Responsive design with modern UI/UX
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React 19**: Modern React with latest features
+- **TypeScript**: Type-safe development
+- **Vite**: Fast build tool and dev server
+- **React Router**: Client-side routing
+- **TailwindCSS**: Utility-first CSS framework
 
-## Expanding the ESLint configuration
+## Installation
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1. Navigate to the web directory:
+```bash
+cd web
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+2. Install dependencies:
+```bash
+npm install
 ```
+
+## Usage
+
+### Development
+
+Start the development server with hot module replacement:
+
+```bash
+npm run dev
+```
+
+The application will be available at `http://localhost:5173` (or another port if 5173 is occupied).
+
+### Build
+
+Build the production-optimized bundle:
+
+```bash
+npm run build
+```
+
+The built files will be in the `dist` directory.
+
+### Preview
+
+Preview the production build locally:
+
+```bash
+npm run preview
+```
+
+### Linting
+
+Run ESLint to check code quality:
+
+```bash
+npm run lint
+```
+
+## Project Structure
+
+```
+web/
+├── src/
+│   ├── components/         # Reusable UI components
+│   ├── pages/              # Page components
+│   ├── contexts/           # React context providers
+│   ├── hooks/              # Custom React hooks
+│   ├── types/              # TypeScript type definitions
+│   ├── utils/              # Utility functions
+│   ├── App.tsx             # Main application component
+│   ├── main.tsx            # Application entry point
+│   └── index.css           # Global styles and Tailwind imports
+├── public/                 # Static assets
+├── index.html              # HTML template
+├── vite.config.ts          # Vite configuration
+├── tailwind.config.js      # TailwindCSS configuration
+├── tsconfig.json           # TypeScript configuration
+└── package.json
+```
+
+## Configuration
+
+### Vite
+
+The Vite configuration is located in `vite.config.ts`. Default settings use the React plugin with Fast Refresh.
+
+### TailwindCSS
+
+Tailwind configuration is in `tailwind.config.js`. Customize theme, colors, and plugins here.
+
+### TypeScript
+
+TypeScript configuration is split into:
+- `tsconfig.json`: Base configuration
+- `tsconfig.app.json`: Application code configuration
+- `tsconfig.node.json`: Build tool configuration
+
+## Development
+
+### Code Style
+
+The project uses ESLint for code quality. Configuration is in `eslint.config.js`.
+
+### Type Safety
+
+TypeScript is configured with strict type checking. Ensure all types are properly defined.
+
+## Integration with Backend
+
+The web frontend is designed to work with the CZTenis Scraper backend. Make sure the backend API is running before starting the frontend development.
+
+## License
+
+ISC

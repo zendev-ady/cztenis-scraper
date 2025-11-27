@@ -25,7 +25,12 @@ cd cztenis-scraper
 npm install
 ```
 
-3. Set up the database:
+3. Install Playwright browsers:
+```bash
+npx playwright install
+```
+
+4. Set up the database:
 ```bash
 npm run db:generate  # Generate database migrations
 npm run db:migrate   # Apply migrations to create tables
@@ -33,9 +38,68 @@ npm run db:migrate   # Apply migrations to create tables
 
 ## Usage
 
-### Scraping Data
+### Quick Start
 
-Start scraping from the queue or add a specific player:
+**Option 1: Run API Server** (for web app development):
+```bash
+npm start
+```
+The API server will be available at `http://localhost:3001`
+
+**Option 2: Run Scraper** (to collect data):
+```bash
+npm run scrape start
+```
+
+---
+
+## API Server
+
+### Starting the Server
+
+Start the API server to provide data to the web frontend:
+
+```bash
+npm start
+# or
+npm run api
+```
+
+The server runs on **http://localhost:3001**
+
+### Available Endpoints
+
+- `GET /health` - Health check endpoint
+- `GET /api/players/search?q=name` - Search for players by name
+- `GET /api/players/:id` - Get player details by ID
+- `GET /api/matches?playerId=123` - Get matches for a specific player
+- `GET /api/h2h?player1Id=123&player2Id=456` - Get head-to-head statistics
+
+**Example requests:**
+```bash
+# Health check
+curl http://localhost:3001/health
+
+# Search for a player
+curl http://localhost:3001/api/players/search?q=novak
+
+# Get player details
+curl http://localhost:3001/api/players/1026900
+
+# Get player matches
+curl http://localhost:3001/api/matches?playerId=1026900
+
+# Get H2H statistics
+curl http://localhost:3001/api/h2h?player1Id=1026900&player2Id=1026901
+```
+
+---
+
+## Scraper
+
+### Starting the Scraper
+
+Scrape data from cztenis.cz and store it in the database:
 
 ```bash
 # Start processing the queue
@@ -47,7 +111,7 @@ npm run scrape start 1026900
 npm run scrape start --player 1026900
 ```
 
-#### Depth-Limited Scraping
+### Depth-Limited Scraping
 
 Control how deeply the scraper crawls through the player network using the `--max-depth` option:
 
