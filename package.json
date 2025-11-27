@@ -5,7 +5,13 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "tsx src/index.ts",
+    "api": "tsx src/api/server.ts",
     "scrape": "tsx src/cli/scrape.ts",
+    "scrape:depth0": "tsx src/cli/scrape.ts start --max-depth 0",
+    "scrape:depth1": "tsx src/cli/scrape.ts start --max-depth 1",
+    "scrape:depth2": "tsx src/cli/scrape.ts start --max-depth 2",
+    "scrape:unlimited": "tsx src/cli/scrape.ts start --max-depth -1",
+    "queue-status": "tsx src/cli/queue-status.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -18,18 +24,22 @@
     "better-sqlite3": "^11.5.0",
     "cheerio": "^1.0.0",
     "commander": "^14.0.2",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.36.0",
+    "express": "^5.1.0",
     "p-queue": "^8.0.1",
     "playwright": "^1.48.2",
     "winston": "^3.16.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
     "@types/node": "^22.9.0",
-    "drizzle-kit": "^0.28.0",
+    "drizzle-kit": "^0.31.7",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.4"
+    "vitest": "^4.0.14"
   }
 }

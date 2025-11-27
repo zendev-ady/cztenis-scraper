@@ -12,8 +12,12 @@ program
     .description('Start scraping from queue or add a player to scrape')
     .argument('[playerId]', 'Optional player ID to add to queue')
     .option('--player <id>', 'Player ID to add to queue (alternative syntax)')
-    .action(async (playerId?: string, options?: { player?: string }) => {
-        const queueManager = new QueueManager();
+    .option('--max-depth <depth>', 'Maximum crawl depth (-1 = unlimited, 0 = only specified player, 1 = player + opponents, etc.)', '-1')
+    .action(async (playerId?: string, options?: { player?: string; maxDepth?: string }) => {
+        const maxDepth = parseInt(options?.maxDepth || '-1', 10);
+        logger.info(`Starting scraper with max depth: ${maxDepth === -1 ? 'unlimited' : maxDepth}`);
+
+        const queueManager = new QueueManager(maxDepth);
         const scraper = new PlayerScraper(queueManager);
         await scraper.init();
 
@@ -28,8 +32,9 @@ program
                 name: `Player ${playerIdNum}`, // Placeholder name, will be updated when scraped
             });
 
-            await queueManager.addPlayer(playerIdNum);
-            logger.info(`Added player ${playerIdToAdd} to queue.`);
+            // Manually added players start at depth 0
+            await queueManager.addPlayer(playerIdNum, 0, false, 0);
+            logger.info(`Added player ${playerIdToAdd} to queue with depth 0.`);
         }
 
         process.on('SIGINT', async () => {
@@ -40,8 +45,8 @@ program
         });
 
         try {
-            await queueManager.processQueue(async (playerId) => {
-                await scraper.scrapePlayer(playerId);
+            await queueManager.processQueue(async (playerId, depth) => {
+                await scraper.scrapePlayer(playerId, depth);
             });
         } catch (error) {
             logger.error('Fatal error in scraper', { error });
@@ -59,6 +64,14 @@ program
             .where(eq(scrapeQueue.status, 'failed'))
             .run();
         logger.info('Reset failed queue items.');
+    });
+
+program
+    .command('clear-queue')
+    .description('Clear entire scrape queue (use with caution!)')
+    .action(async () => {
+        const result = await db.delete(scrapeQueue).run();
+        logger.info(`Cleared entire scrape queue. Deleted ${result.changes} items.`);
     });
 
 program.parse();

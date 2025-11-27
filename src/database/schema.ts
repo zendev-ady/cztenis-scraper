@@ -148,6 +148,10 @@ export const scrapeQueue = sqliteTable('scrape_queue', {
     lastAttemptAt: integer('last_attempt_at', { mode: 'timestamp' }),
     errorMessage: text('error_message'),
 
+    // Depth tracking for crawl limiting
+    depth: integer('depth').default(0).notNull(), // 0 = manually added, 1 = opponent of manual, 2 = opponent of opponent, etc.
+    sourcePlayerId: integer('source_player_id').references(() => players.id), // Which player added this to queue (null if manually added)
+
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
     statusIdx: index('idx_queue_status').on(table.status, table.priority),

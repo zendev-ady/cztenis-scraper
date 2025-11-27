@@ -30,6 +30,7 @@ logs/
 # IDE and editor files
 .vscode/
 .VSCodeCounter/
+.claude/
 .idea/
 *.swp
 *.swo

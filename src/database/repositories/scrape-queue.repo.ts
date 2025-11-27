@@ -3,13 +3,25 @@ import { db } from '../index';
 import { scrapeQueue } from '../schema';
 
 export class ScrapeQueueRepository {
-    async add(playerId: number, priority: number = 0, force: boolean = false) {
+    async add(
+        playerId: number,
+        priority: number = 0,
+        force: boolean = false,
+        depth: number = 0,
+        sourcePlayerId?: number
+    ) {
         if (force) {
             return db.insert(scrapeQueue)
-                .values({ playerId, priority, status: 'pending' })
+                .values({
+                    playerId,
+                    priority,
+                    status: 'pending',
+                    depth,
+                    sourcePlayerId
+                })
                 .onConflictDoUpdate({
                     target: scrapeQueue.playerId,
-                    set: { status: 'pending', priority, errorMessage: null }
+                    set: { status: 'pending', priority, errorMessage: null, depth, sourcePlayerId }
                 })
                 .run();
         }
@@ -18,6 +30,8 @@ export class ScrapeQueueRepository {
                 playerId,
                 priority,
                 status: 'pending',
+                depth,
+                sourcePlayerId,
             })
             .onConflictDoNothing()
             .run();
@@ -71,5 +85,14 @@ export class ScrapeQueueRepository {
             .where(eq(scrapeQueue.status, 'pending'));
 
         return result[0].count;
+    }
+
+    async getByPlayerId(playerId: number) {
+        const result = await db.select()
+            .from(scrapeQueue)
+            .where(eq(scrapeQueue.playerId, playerId))
+            .limit(1);
+
+        return result[0] || null;
     }
 }
