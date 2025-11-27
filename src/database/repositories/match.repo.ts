@@ -1,6 +1,6 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or, sql, desc, gte } from 'drizzle-orm';
 import { db } from '../index';
-import { matches } from '../schema';
+import { matches, tournaments } from '../schema';
 
 export class MatchRepository {
     async create(data: typeof matches.$inferInsert) {
@@ -36,5 +36,83 @@ export class MatchRepository {
         }
 
         return db.insert(matches).values(data).run();
+    }
+
+    async findByPlayerId(playerId: number, options?: {
+        limit?: number,
+        offset?: number,
+        matchType?: 'singles' | 'doubles',
+        year?: number
+    }) {
+        const { limit = 50, offset = 0, matchType, year } = options || {};
+
+        // Build where conditions
+        const conditions = [
+            or(
+                eq(matches.player1Id, playerId),
+                eq(matches.player2Id, playerId)
+            )
+        ];
+
+        if (matchType) {
+            conditions.push(eq(matches.matchType, matchType));
+        }
+
+        if (year) {
+            const yearStart = new Date(year, 0, 1);
+            const yearEnd = new Date(year + 1, 0, 1);
+            conditions.push(
+                gte(matches.matchDate, yearStart),
+                sql`${matches.matchDate} < ${yearEnd}`
+            );
+        }
+
+        return db.select({
+            match: matches,
+            tournament: tournaments,
+        })
+        .from(matches)
+        .leftJoin(tournaments, eq(matches.tournamentId, tournaments.id))
+        .where(and(...conditions))
+        .orderBy(desc(matches.matchDate))
+        .limit(limit)
+        .offset(offset)
+        .all();
+    }
+
+    async countByPlayerId(playerId: number) {
+        const result = await db.select({
+            count: sql<number>`COUNT(*)`
+        })
+        .from(matches)
+        .where(
+            or(
+                eq(matches.player1Id, playerId),
+                eq(matches.player2Id, playerId)
+            )
+        )
+        .get();
+
+        return result?.count || 0;
+    }
+
+    async findBetweenPlayers(player1Id: number, player2Id: number) {
+        // Find all matches where both players participated
+        return db.select()
+            .from(matches)
+            .where(
+                or(
+                    and(
+                        eq(matches.player1Id, player1Id),
+                        eq(matches.player2Id, player2Id)
+                    ),
+                    and(
+                        eq(matches.player1Id, player2Id),
+                        eq(matches.player2Id, player1Id)
+                    )
+                )
+            )
+            .orderBy(desc(matches.matchDate))
+            .all();
     }
 }
