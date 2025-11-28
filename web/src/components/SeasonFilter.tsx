@@ -10,28 +10,33 @@ interface SeasonFilterProps {
 }
 
 export default function SeasonFilter({ seasons, selectedSeasons, onSeasonsChange }: SeasonFilterProps) {
-  const toggleSeason = (seasonCode: string) => {
-    if (selectedSeasons.includes(seasonCode)) {
-      // Remove season
-      const newSeasons = selectedSeasons.filter(s => s !== seasonCode);
-      onSeasonsChange(newSeasons.length > 0 ? newSeasons : seasons.map(s => s.code));
-    } else {
-      // Add season
-      onSeasonsChange([...selectedSeasons, seasonCode]);
-    }
-  };
-
-  const toggleAll = () => {
-    if (selectedSeasons.length === seasons.length) {
-      // If all selected, keep all selected (do nothing)
-      return;
-    } else {
-      // Select all
-      onSeasonsChange(seasons.map(s => s.code));
-    }
-  };
-
   const allSelected = selectedSeasons.length === seasons.length;
+
+  const handleAllClick = () => {
+    // Select all seasons
+    onSeasonsChange(seasons.map(s => s.code));
+  };
+
+  const handleSeasonClick = (seasonCode: string) => {
+    if (allSelected) {
+      // If "Vše" is active, clicking a season selects only that season
+      onSeasonsChange([seasonCode]);
+    } else {
+      // Multi-select logic
+      if (selectedSeasons.includes(seasonCode)) {
+        // Remove season (but keep at least one selected)
+        const newSeasons = selectedSeasons.filter(s => s !== seasonCode);
+        if (newSeasons.length === 0) {
+          // Don't allow deselecting the last season
+          return;
+        }
+        onSeasonsChange(newSeasons);
+      } else {
+        // Add season
+        onSeasonsChange([...selectedSeasons, seasonCode]);
+      }
+    }
+  };
 
   // Format season label from code
   const formatSeasonLabel = (code: string): string => {
@@ -55,7 +60,7 @@ export default function SeasonFilter({ seasons, selectedSeasons, onSeasonsChange
       <div className="flex flex-wrap gap-2">
         {/* "Vše" button */}
         <button
-          onClick={toggleAll}
+          onClick={handleAllClick}
           className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             allSelected
               ? 'bg-blue-600 text-white'
@@ -67,19 +72,25 @@ export default function SeasonFilter({ seasons, selectedSeasons, onSeasonsChange
 
         {/* Season chips */}
         {seasons.map(season => {
-          const isSelected = selectedSeasons.includes(season.code);
+          const isSelected = !allSelected && selectedSeasons.includes(season.code);
+          const isDisabled = allSelected;
+
           return (
             <button
               key={season.code}
-              onClick={() => toggleSeason(season.code)}
+              onClick={() => handleSeasonClick(season.code)}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 isSelected
                   ? 'bg-blue-600 text-white'
+                  : isDisabled
+                  ? 'bg-gray-50 text-gray-400 cursor-default'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               {formatSeasonLabel(season.code)}
-              <span className="ml-1.5 text-xs opacity-75">({season.matchCount})</span>
+              <span className={`ml-1.5 text-xs ${isSelected ? 'opacity-75' : isDisabled ? 'opacity-50' : 'opacity-75'}`}>
+                ({season.matchCount})
+              </span>
             </button>
           );
         })}
