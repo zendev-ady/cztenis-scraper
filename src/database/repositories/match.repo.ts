@@ -96,22 +96,38 @@ export class MatchRepository {
         return result?.count || 0;
     }
 
-    async findBetweenPlayers(player1Id: number, player2Id: number) {
-        // Find all matches where both players participated
-        return db.select()
-            .from(matches)
-            .where(
-                or(
-                    and(
-                        eq(matches.player1Id, player1Id),
-                        eq(matches.player2Id, player2Id)
-                    ),
-                    and(
-                        eq(matches.player1Id, player2Id),
-                        eq(matches.player2Id, player1Id)
-                    )
+    async findBetweenPlayers(player1Id: number, player2Id: number, options?: {
+        matchType?: 'all' | 'singles' | 'doubles'
+    }) {
+        const { matchType } = options || {};
+        
+        // Build where conditions
+        const conditions = [
+            or(
+                and(
+                    eq(matches.player1Id, player1Id),
+                    eq(matches.player2Id, player2Id)
+                ),
+                and(
+                    eq(matches.player1Id, player2Id),
+                    eq(matches.player2Id, player1Id)
                 )
             )
+        ];
+        
+        // Add match type filter if specified
+        if (matchType && matchType !== 'all') {
+            conditions.push(eq(matches.matchType, matchType));
+        }
+        
+        // Find all matches where both players participated with tournament data
+        return db.select({
+            match: matches,
+            tournament: tournaments,
+        })
+            .from(matches)
+            .leftJoin(tournaments, eq(matches.tournamentId, tournaments.id))
+            .where(and(...conditions))
             .orderBy(desc(matches.matchDate))
             .all();
     }

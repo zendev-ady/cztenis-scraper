@@ -1,5 +1,15 @@
 import { useState } from 'react';
-import { searchPlayers, getH2H, type Player, type H2HData } from '../lib/api';
+import { searchPlayers, getH2H, type Player, type H2HData, type MatchWithTournament } from '../lib/api';
+import MatchTypeFilter from '../components/MatchTypeFilter';
+
+interface MatchGroup {
+  tournamentId: number;
+  tournamentName: string;
+  tournamentDate: string | null;
+  matchType: 'singles' | 'doubles';
+  matches: MatchWithTournament[];
+  effectiveDate: Date | null;
+}
 
 export default function H2HPage() {
   const [player1Query, setPlayer1Query] = useState('');
@@ -9,6 +19,7 @@ export default function H2HPage() {
   const [selectedPlayer1, setSelectedPlayer1] = useState<Player | null>(null);
   const [selectedPlayer2, setSelectedPlayer2] = useState<Player | null>(null);
   const [h2hData, setH2hData] = useState<H2HData | null>(null);
+  const [matchType, setMatchType] = useState<'all' | 'singles' | 'doubles'>('all');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +72,7 @@ export default function H2HPage() {
     setError(null);
 
     try {
-      const data = await getH2H(selectedPlayer1.id, selectedPlayer2.id);
+      const data = await getH2H(selectedPlayer1.id, selectedPlayer2.id, matchType);
       setH2hData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chyba při načítání H2H');
@@ -69,6 +80,75 @@ export default function H2HPage() {
       setIsLoading(false);
     }
   };
+
+  const handleMatchTypeChange = async (newType: 'all' | 'singles' | 'doubles') => {
+    setMatchType(newType);
+    
+    // Refetch data if we already have results
+    if (selectedPlayer1 && selectedPlayer2 && h2hData) {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        const data = await getH2H(selectedPlayer1.id, selectedPlayer2.id, newType);
+        setH2hData(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Chyba při načítání H2H');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  // Group matches by tournament and match type
+  const getMatchGroups = (): MatchGroup[] => {
+    if (!h2hData || !h2hData.matches) return [];
+
+    const groups = new Map<string, MatchGroup>();
+
+    for (const matchData of h2hData.matches) {
+      // Handle both formats: { match, tournament } or flat match object
+      const match = 'match' in matchData ? matchData.match : matchData;
+      const tournament = 'tournament' in matchData ? matchData.tournament : null;
+      
+      if (!match || !match.tournamentId) continue;
+      
+      const tournamentId = match.tournamentId;
+      const matchTypeKey = match.matchType as 'singles' | 'doubles';
+
+      // Use composite key: tournamentId + matchType
+      const groupKey = `${tournamentId}-${matchTypeKey}`;
+
+      if (!groups.has(groupKey)) {
+        const matchDate = match.matchDate ? new Date(match.matchDate) : null;
+        const isValidDate = matchDate && !isNaN(matchDate.getTime());
+
+        groups.set(groupKey, {
+          tournamentId,
+          tournamentName: tournament?.name || 'Neznámý turnaj',
+          tournamentDate: tournament?.date || null,
+          matchType: matchTypeKey,
+          matches: [],
+          effectiveDate: isValidDate ? matchDate : null,
+        });
+      }
+
+      // Ensure we push the correct structure
+      const normalizedMatchData: MatchWithTournament = 'match' in matchData 
+        ? matchData as MatchWithTournament
+        : { match: matchData as any, tournament: null };
+      groups.get(groupKey)!.matches.push(normalizedMatchData);
+    }
+
+    // Sort groups by effective date (newest first)
+    return Array.from(groups.values()).sort((a, b) => {
+      if (!a.effectiveDate) return 1;
+      if (!b.effectiveDate) return -1;
+      return b.effectiveDate.getTime() - a.effectiveDate.getTime();
+    });
+  };
+
+  const matchGroups = getMatchGroups();
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -181,7 +261,7 @@ export default function H2HPage() {
       {/* H2H Results */}
       {h2hData && (
         <div className="space-y-6">
-          {/* Stats Summary */}
+          {/* Stats Summary with Filter */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
               Vzájemná bilance
@@ -202,52 +282,133 @@ export default function H2HPage() {
               </div>
             </div>
             {h2hData.stats.lastMatchDate && (
-              <div className="text-center text-sm text-gray-500">
+              <div className="text-center text-sm text-gray-500 mb-6">
                 Poslední zápas: {new Date(h2hData.stats.lastMatchDate).toLocaleDateString('cs-CZ')}
               </div>
             )}
+            
+            {/* Match Type Filter */}
+            <div className="border-t border-gray-200 pt-4">
+              <MatchTypeFilter
+                selectedType={matchType}
+                onTypeChange={handleMatchTypeChange}
+              />
+            </div>
           </div>
 
           {/* Match History */}
-          {h2hData.matches.length > 0 && (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Historie vzájemných zápasů</h3>
-              <div className="space-y-3">
-                {h2hData.matches.map((match) => {
-                  const isPlayer1Winner = match.winnerId === h2hData.player1.id;
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Historie vzájemných zápasů</h3>
+            
+            {isLoading ? (
+              <div className="text-center py-8 text-gray-500">
+                Načítání zápasů...
+              </div>
+            ) : matchGroups.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                Žádné zápasy v této kategorii
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {matchGroups.map((group) => {
+                  const player1Wins = group.matches.filter(
+                    ({ match }) => match.winnerId === h2hData.player1.id
+                  ).length;
+                  const player2Wins = group.matches.length - player1Wins;
 
                   return (
-                    <div
-                      key={match.id}
-                      className={`p-4 rounded-lg border-l-4 ${
-                        isPlayer1Winner ? 'border-blue-500 bg-blue-50' : 'border-green-500 bg-green-50'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-medium text-lg">
-                            {isPlayer1Winner ? h2hData.player1.name : h2hData.player2.name}
+                    <div key={`${group.tournamentId}-${group.matchType}`} className="border border-gray-200 rounded-lg p-4">
+                      {/* Tournament Header */}
+                      <div className="mb-3 pb-3 border-b border-gray-200">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-gray-900">{group.tournamentName}</h4>
+                          <span className={`text-xs px-2 py-1 rounded ${group.matchType === 'doubles'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-blue-100 text-blue-700'
+                            }`}>
+                            {group.matchType === 'doubles' ? 'Čtyřhra' : 'Dvouhra'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center mt-1">
+                          <div className="text-sm text-gray-500">
+                            {group.effectiveDate
+                              ? group.effectiveDate.toLocaleDateString('cs-CZ')
+                              : group.tournamentDate
+                                ? new Date(group.tournamentDate).toLocaleDateString('cs-CZ')
+                                : 'Datum neznámé'}
                           </div>
                           <div className="text-sm text-gray-600">
-                            vs {isPlayer1Winner ? h2hData.player2.name : h2hData.player1.name}
+                            Bilance: {player1Wins}W - {player2Wins}L
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm text-gray-500">
-                            {new Date(match.matchDate).toLocaleDateString('cs-CZ')}
-                          </div>
-                          <div className="text-sm text-gray-500">{match.round}</div>
                         </div>
                       </div>
-                      <div className="mt-2 text-sm text-gray-600">
-                        Skóre: {match.score}
+
+                      {/* Tournament Matches */}
+                      <div className="space-y-2">
+                        {group.matches
+                          .sort((a, b) => {
+                            const getRoundOrder = (round: string) => {
+                              const match = round.match(/^(\d+)>/);
+                              return match ? parseInt(match[1], 10) : 999;
+                            };
+                            return getRoundOrder(b.match.round) - getRoundOrder(a.match.round);
+                          })
+                          .map(({ match }) => {
+                            const isPlayer1Winner = match.winnerId === h2hData.player1.id;
+
+                            return (
+                              <div
+                                key={match.id}
+                                className={`p-3 rounded-md border-l-4 ${
+                                  isPlayer1Winner ? 'border-blue-500 bg-blue-50' : 'border-green-500 bg-green-50'
+                                }`}
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium">
+                                        {isPlayer1Winner ? '✓' : '✗'}
+                                      </span>
+                                      <span className="font-medium">
+                                        {isPlayer1Winner ? h2hData.player1.name : h2hData.player2.name}
+                                      </span>
+                                    </div>
+                                    {match.matchType === 'doubles' && (
+                                      <div className="mt-1 text-sm text-gray-600">
+                                        {isPlayer1Winner 
+                                          ? (match.player1Id === h2hData.player1.id 
+                                              ? `s partnerem` 
+                                              : `s partnerem`)
+                                          : (match.player1Id === h2hData.player2.id 
+                                              ? `s partnerem` 
+                                              : `s partnerem`)}
+                                      </div>
+                                    )}
+                                    <div className="mt-1">
+                                      <span className="text-sm text-gray-600">vs </span>
+                                      <span className="font-medium">
+                                        {isPlayer1Winner ? h2hData.player2.name : h2hData.player1.name}
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 text-sm text-gray-500">{match.round}</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="font-medium text-gray-900">{match.score}</div>
+                                    {match.isWalkover && (
+                                      <div className="text-xs text-gray-500 mt-1">Kontumace</div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>
