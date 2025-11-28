@@ -3,6 +3,7 @@ import { QueueManager } from '../services/queue-manager';
 import { PlayerScraper } from '../scrapers/player-scraper';
 import { PlayerRepository } from '../database/repositories/player.repo';
 import { QualityMonitor } from '../services/quality-monitor';
+import { TournamentIntegrityValidator } from '../validators/tournament-integrity';
 import { logger } from '../utils/logger';
 import { db, sqlite } from '../database';
 import { scrapeQueue } from '../database/schema';
@@ -20,7 +21,8 @@ program
     .option('--player <id>', 'Player ID to add to queue (alternative syntax)')
     .option('--max-depth <depth>', 'Maximum crawl depth (-1 = unlimited, 0 = only specified player, 1 = player + opponents, etc.)', '-1')
     .option('--limit <count>', 'Maximum number of players to scrape (-1 = unlimited)', '-1')
-    .action(async (playerId?: string, maxDepthArg?: string, limitArg?: string, options?: { player?: string; maxDepth?: string; limit?: string }) => {
+    .option('--validate', 'Run integrity validation after scraping')
+    .action(async (playerId?: string, maxDepthArg?: string, limitArg?: string, options?: { player?: string; maxDepth?: string; limit?: string; validate?: boolean }) => {
         // Resolve maxDepth: positional arg > option > default
         // Note: options.maxDepth has a default value of '-1', so we need to check if maxDepthArg is provided
         const maxDepthVal = maxDepthArg !== undefined ? maxDepthArg : (options?.maxDepth || '-1');
@@ -73,6 +75,14 @@ program
             // Print final quality report
             logger.info('Scraping completed! Generating quality report...');
             qualityMonitor.printReport();
+
+            // Run integrity validation if requested
+            if (options?.validate) {
+                logger.info('Running integrity validation...');
+                const validator = new TournamentIntegrityValidator();
+                const report = await validator.validateAll({ limit: 50 });
+                console.log('\n' + validator.generateReport(report));
+            }
 
         } catch (error) {
             logger.error('Fatal error in scraper', { error });

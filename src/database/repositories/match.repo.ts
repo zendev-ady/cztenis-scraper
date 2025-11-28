@@ -15,7 +15,7 @@ export class MatchRepository {
             throw new Error('Cannot create match: missing tournamentId');
         }
 
-        // Check for duplicate: match is unique by (tournamentId, round, player1Id, player2Id)
+        // Check for duplicate: match is unique by (tournamentId, round, player1Id, player2Id, matchType)
         // Since we now normalize player order (player1Id < player2Id), this should prevent
         // duplicate entries when scraping from both players' perspectives
         const existing = await db.select()
@@ -24,7 +24,8 @@ export class MatchRepository {
                 eq(matches.tournamentId, data.tournamentId),
                 eq(matches.round, data.round),
                 eq(matches.player1Id, data.player1Id),
-                eq(matches.player2Id, data.player2Id)
+                eq(matches.player2Id, data.player2Id),
+                eq(matches.matchType, data.matchType)
             ))
             .get();
 

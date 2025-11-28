@@ -89,6 +89,8 @@ export const matches = sqliteTable('matches', {
     winnerIdx: index('idx_matches_winner').on(table.winnerId),
     dateIdx: index('idx_matches_date').on(table.matchDate),
     typeIdx: index('idx_matches_type').on(table.matchType, table.competitionType),
+    // Unique constraint: one match per tournament/round/players/matchType combination
+    uniqueMatch: unique().on(table.tournamentId, table.round, table.player1Id, table.player2Id, table.matchType),
 }));
 
 // H2H Stats table
