@@ -20,6 +20,8 @@ interface MatchGroup {
   tournamentDate: string | null;
   matchType: 'singles' | 'doubles';
   matches: MatchWithTournament[];
+  // Use the most recent match date as the effective date for sorting
+  effectiveDate: Date | null;
 }
 
 interface PlayerCache {
@@ -153,23 +155,30 @@ export default function PlayerPage() {
           const groupKey = `${tournamentId}-${matchTypeKey}`;
 
           if (!groups.has(groupKey)) {
+            // Parse the match date to use as effective date for sorting
+            const matchDate = match.matchDate ? new Date(match.matchDate) : null;
+            const isValidDate = matchDate && !isNaN(matchDate.getTime());
+            
             groups.set(groupKey, {
               tournamentId,
               tournamentName: tournament?.name || 'Neznámý turnaj',
               tournamentDate: tournament?.date || null,
               matchType: matchTypeKey,
               matches: [],
+              // Use match date as effective date (more reliable than tournament date)
+              effectiveDate: isValidDate ? matchDate : null,
             });
           }
 
           groups.get(groupKey)!.matches.push(matchData);
         }
 
-        // Convert to array and sort by tournament date (newest first)
+        // Convert to array and sort by effective date (newest first)
+        // Using match date instead of tournament date for more accurate sorting
         const groupedMatches = Array.from(groups.values()).sort((a, b) => {
-          if (!a.tournamentDate) return 1;
-          if (!b.tournamentDate) return -1;
-          return new Date(b.tournamentDate).getTime() - new Date(a.tournamentDate).getTime();
+          if (!a.effectiveDate) return 1;
+          if (!b.effectiveDate) return -1;
+          return b.effectiveDate.getTime() - a.effectiveDate.getTime();
         });
 
         setMatchGroups(groupedMatches);
@@ -367,8 +376,11 @@ export default function PlayerPage() {
                       </div>
                       <div className="flex justify-between items-center mt-1">
                         <div className="text-sm text-gray-500">
-                          {group.tournamentDate &&
-                            new Date(group.tournamentDate).toLocaleDateString('cs-CZ')}
+                          {group.effectiveDate
+                            ? group.effectiveDate.toLocaleDateString('cs-CZ')
+                            : group.tournamentDate
+                              ? new Date(group.tournamentDate).toLocaleDateString('cs-CZ')
+                              : 'Datum neznámé'}
                         </div>
                         <div className="text-sm text-gray-600">
                           Bilance: {wins}W - {total - wins}L

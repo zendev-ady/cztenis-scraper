@@ -8,6 +8,7 @@ import { QueueManager } from '../services/queue-manager';
 import { AdaptiveRateLimiter } from '../utils/adaptive-rate-limiter';
 import { QualityMonitor } from '../services/quality-monitor';
 import { validateMatch } from '../validators/match-validator';
+import { parsePlayerName } from './parsers/player-parser';
 
 export class PlayerScraper {
     private httpClient: HttpClient;
@@ -108,27 +109,36 @@ export class PlayerScraper {
                             // Ensure players exist before creating match
                             const nextDepth = currentDepth + 1;
 
-                            // Upsert opponent player
+                            // Upsert opponent player with parsed name
+                            const opponentNameParsed = parsePlayerName(match.opponentName || 'Unknown');
                             await this.playerRepo.upsert({
                                 id: match.opponentId,
                                 name: match.opponentName || 'Unknown',
+                                firstName: opponentNameParsed.firstName,
+                                lastName: opponentNameParsed.lastName,
                             });
                             await this.queueManager.addPlayer(match.opponentId, 0, false, nextDepth, playerId);
 
                             // Upsert partner if it's doubles
                             if (match.partnerId) {
+                                const partnerNameParsed = parsePlayerName(match.partnerName || 'Unknown');
                                 await this.playerRepo.upsert({
                                     id: match.partnerId,
-                                    name: match.partnerName || 'Unknown'
+                                    name: match.partnerName || 'Unknown',
+                                    firstName: partnerNameParsed.firstName,
+                                    lastName: partnerNameParsed.lastName,
                                 });
                                 await this.queueManager.addPlayer(match.partnerId, 0, false, nextDepth, playerId);
                             }
 
                             // Upsert opponent partner if it's doubles
                             if (match.opponentPartnerId) {
+                                const opponentPartnerNameParsed = parsePlayerName(match.opponentPartnerName || 'Unknown');
                                 await this.playerRepo.upsert({
                                     id: match.opponentPartnerId,
-                                    name: match.opponentPartnerName || 'Unknown'
+                                    name: match.opponentPartnerName || 'Unknown',
+                                    firstName: opponentPartnerNameParsed.firstName,
+                                    lastName: opponentPartnerNameParsed.lastName,
                                 });
                                 await this.queueManager.addPlayer(match.opponentPartnerId, 0, false, nextDepth, playerId);
                             }
@@ -177,6 +187,7 @@ export class PlayerScraper {
                                 winnerId: match.isWinner ? playerId : match.opponentId,
                                 pointsEarned: match.pointsEarned,
                                 matchDate: match.tournamentDate,
+                                seasonCode: season.value,
                             });
 
                             logger.debug(`Successfully saved match: ${playerId} vs ${match.opponentId} in tournament ${match.tournamentId}`);

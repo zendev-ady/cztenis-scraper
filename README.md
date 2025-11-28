@@ -67,8 +67,6 @@ npm run scrape start <playerId> <maxDepth> <limit>
 | `maxDepth` | `0`=Player only, `1`=Opponents, `-1`=Unlimited | `-1` |
 | `limit` | Max players to process (`-1` = unlimited) | `-1` |
 
-
-
 ### Common Commands
 
 ```bash

@@ -15,7 +15,9 @@ export interface ScoreValidation {
   warnings: string[];
 }
 
-const WALKOVER_PATTERNS = ['scr.', 'w.o.', 'def.', 'ret.', 'skreč'];
+import { WALKOVER_PATTERNS, SET_PATTERN } from '../utils/score-constants';
+
+// Note: patterns centralized in utils to keep parser and validator consistent
 
 export function validateScore(score: string): ScoreValidation {
   const errors: string[] = [];
@@ -80,9 +82,8 @@ function validateSet(setScore: string, setNumber: number): { errors: string[]; w
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Pattern for set score: "6:3" or "7:6 (3)" or "1:0 (7)" or "6:7 ()" (empty tiebreak)
-  const setPattern = /^(\d+):(\d+)(?:\s*\((\d*)\))?$/;
-  const match = setScore.match(setPattern);
+  // Pattern for set score (shared)
+  const match = setScore.match(SET_PATTERN);
 
   if (!match) {
     errors.push(`Set ${setNumber}: Invalid format "${setScore}"`);

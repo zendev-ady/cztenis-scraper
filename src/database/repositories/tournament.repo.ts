@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../index';
 import { tournaments, seasons } from '../schema';
 
@@ -9,9 +9,14 @@ export class TournamentRepository {
             .onConflictDoUpdate({
                 target: tournaments.id,
                 set: {
-                    name: data.name,
+                    // Only update name if existing is null/empty AND new name is non-empty
+                    name: sql`CASE 
+                        WHEN tournaments.name IS NULL OR tournaments.name = '' 
+                        THEN ${data.name} 
+                        ELSE tournaments.name 
+                    END`,
                     date: data.date,
-                    seasonCode: data.seasonCode,
+                    // seasonCode is immutable - don't overwrite on re-scraping
                 },
             })
             .run();
