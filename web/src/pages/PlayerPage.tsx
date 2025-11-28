@@ -6,6 +6,7 @@ interface MatchGroup {
   tournamentId: number;
   tournamentName: string;
   tournamentDate: string | null;
+  matchType: 'singles' | 'doubles';
   matches: MatchWithTournament[];
 }
 
@@ -36,23 +37,28 @@ export default function PlayerPage() {
 
         setPlayerData(playerResult);
 
-        // Group matches by tournament
-        const groups = new Map<number, MatchGroup>();
+        // Group matches by tournament AND match type (singles/doubles are separate competitions)
+        const groups = new Map<string, MatchGroup>();
 
         for (const matchData of matchesResult.matches) {
           const { match, tournament } = matchData;
           const tournamentId = match.tournamentId;
+          const matchType = match.matchType as 'singles' | 'doubles';
 
-          if (!groups.has(tournamentId)) {
-            groups.set(tournamentId, {
+          // Use composite key: tournamentId + matchType
+          const groupKey = `${tournamentId}-${matchType}`;
+
+          if (!groups.has(groupKey)) {
+            groups.set(groupKey, {
               tournamentId,
               tournamentName: tournament?.name || 'Neznámý turnaj',
               tournamentDate: tournament?.date || null,
+              matchType,
               matches: [],
             });
           }
 
-          groups.get(tournamentId)!.matches.push(matchData);
+          groups.get(groupKey)!.matches.push(matchData);
         }
 
         // Convert to array and sort by tournament date (newest first)
@@ -64,25 +70,34 @@ export default function PlayerPage() {
 
         setMatchGroups(groupedMatches);
 
-        // Fetch opponent names
-        const opponentIds = new Set<number>();
+        // Fetch opponent and partner names
+        const playerIdsToFetch = new Set<number>();
         matchesResult.matches.forEach(({ match }) => {
-          const opponentId = match.player1Id === parseInt(id) ? match.player2Id : match.player1Id;
-          opponentIds.add(opponentId);
+          const currentPlayerId = parseInt(id);
+
+          // Add opponent
+          const opponentId = match.player1Id === currentPlayerId ? match.player2Id : match.player1Id;
+          playerIdsToFetch.add(opponentId);
+
+          // Add partners for doubles matches
+          if (match.matchType === 'doubles') {
+            if (match.player1PartnerId) playerIdsToFetch.add(match.player1PartnerId);
+            if (match.player2PartnerId) playerIdsToFetch.add(match.player2PartnerId);
+          }
         });
 
-        // Fetch all opponent data
+        // Fetch all player data (opponents and partners)
         const cache: PlayerCache = {};
         await Promise.all(
-          Array.from(opponentIds).map(async (opponentId) => {
+          Array.from(playerIdsToFetch).map(async (playerId) => {
             try {
-              const opponent = await getPlayer(opponentId);
-              cache[opponentId] = {
-                id: opponent.player.id,
-                name: opponent.player.name
+              const player = await getPlayer(playerId);
+              cache[playerId] = {
+                id: player.player.id,
+                name: player.player.name
               };
             } catch {
-              cache[opponentId] = null;
+              cache[playerId] = null;
             }
           })
         );
@@ -203,10 +218,18 @@ export default function PlayerPage() {
               const total = group.matches.length;
 
               return (
-                <div key={group.tournamentId} className="border border-gray-200 rounded-lg p-4">
+                <div key={`${group.tournamentId}-${group.matchType}`} className="border border-gray-200 rounded-lg p-4">
                   {/* Tournament Header */}
                   <div className="mb-3 pb-3 border-b border-gray-200">
-                    <h3 className="font-bold text-gray-900">{group.tournamentName}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-gray-900">{group.tournamentName}</h3>
+                      <span className={`text-xs px-2 py-1 rounded ${group.matchType === 'doubles'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-blue-100 text-blue-700'
+                        }`}>
+                        {group.matchType === 'doubles' ? 'Čtyřhra' : 'Dvouhra'}
+                      </span>
+                    </div>
                     <div className="flex justify-between items-center mt-1">
                       <div className="text-sm text-gray-500">
                         {group.tournamentDate &&
@@ -220,49 +243,93 @@ export default function PlayerPage() {
 
                   {/* Tournament Matches */}
                   <div className="space-y-2">
-                    {group.matches.map(({ match }) => {
-                      const isWinner = match.winnerId === parseInt(id!);
-                      const opponentId =
-                        match.player1Id === parseInt(id!) ? match.player2Id : match.player1Id;
-                      const opponent = playerCache[opponentId];
+                    {/* Sort matches by round order (earlier rounds first) */}
+                    {group.matches
+                      .sort((a, b) => {
+                        // Extract numeric part from round strings like "32>16", "16>8", "8>4", "4>2", "2>1"
+                        const getRoundOrder = (round: string) => {
+                          const match = round.match(/^(\d+)>/);
+                          return match ? parseInt(match[1], 10) : 999;
+                        };
+                        return getRoundOrder(b.match.round) - getRoundOrder(a.match.round);
+                      })
+                      .map(({ match }) => {
+                        const isWinner = match.winnerId === parseInt(id!);
+                        const currentPlayerId = parseInt(id!);
 
-                      return (
-                        <div
-                          key={match.id}
-                          className={`p-3 rounded-md border-l-4 ${
-                            isWinner
+                        // Determine opponent and partner based on match type
+                        let opponentId: number;
+                        let partnerId: number | null = null;
+                        let opponentPartnerId: number | null = null;
+
+                        if (match.player1Id === currentPlayerId) {
+                          opponentId = match.player2Id;
+                          partnerId = match.player1PartnerId || null;
+                          opponentPartnerId = match.player2PartnerId || null;
+                        } else {
+                          opponentId = match.player1Id;
+                          partnerId = match.player2PartnerId || null;
+                          opponentPartnerId = match.player1PartnerId || null;
+                        }
+
+                        const opponent = playerCache[opponentId];
+                        const partner = partnerId ? playerCache[partnerId] : null;
+                        const opponentPartner = opponentPartnerId ? playerCache[opponentPartnerId] : null;
+
+                        return (
+                          <div
+                            key={match.id}
+                            className={`p-3 rounded-md border-l-4 ${isWinner
                               ? 'border-green-500 bg-green-50'
                               : 'border-red-500 bg-red-50'
-                          }`}
-                        >
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">
-                                  {isWinner ? '✓' : '✗'}
-                                </span>
-                                <span className="text-sm text-gray-600">{match.round}</span>
+                              }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">
+                                    {isWinner ? '✓' : '✗'}
+                                  </span>
+                                  <span className="text-sm text-gray-600">{match.round}</span>
+                                </div>
+                                {/* Show partner for doubles */}
+                                {match.matchType === 'doubles' && partner && (
+                                  <div className="mt-1 text-sm text-gray-600">
+                                    s {partner.name}
+                                  </div>
+                                )}
+                                <div className="mt-1">
+                                  <span className="text-sm text-gray-600">vs </span>
+                                  <Link
+                                    to={`/player/${opponentId}`}
+                                    className="text-blue-600 hover:underline font-medium"
+                                  >
+                                    {opponent ? opponent.name : `Hráč ${opponentId}`}
+                                  </Link>
+                                  {/* Show opponent partner for doubles */}
+                                  {match.matchType === 'doubles' && opponentPartner && (
+                                    <>
+                                      <span className="text-sm text-gray-600">, </span>
+                                      <Link
+                                        to={`/player/${opponentPartnerId}`}
+                                        className="text-blue-600 hover:underline font-medium"
+                                      >
+                                        {opponentPartner.name}
+                                      </Link>
+                                    </>
+                                  )}
+                                </div>
                               </div>
-                              <div className="mt-1">
-                                <span className="text-sm text-gray-600">vs </span>
-                                <Link
-                                  to={`/player/${opponentId}`}
-                                  className="text-blue-600 hover:underline font-medium"
-                                >
-                                  {opponent ? opponent.name : `Hráč ${opponentId}`}
-                                </Link>
+                              <div className="text-right">
+                                <div className="font-medium text-gray-900">{match.score}</div>
+                                {match.isWalkover && (
+                                  <div className="text-xs text-gray-500 mt-1">Kontumace</div>
+                                )}
                               </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-medium text-gray-900">{match.score}</div>
-                              {match.isWalkover && (
-                                <div className="text-xs text-gray-500 mt-1">Kontumace</div>
-                              )}
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
                   </div>
                 </div>
               );

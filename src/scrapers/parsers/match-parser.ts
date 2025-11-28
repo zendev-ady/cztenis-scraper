@@ -64,13 +64,12 @@ export function parseMatches(html: string, scrapedPlayerId: number): ParsedMatch
         } else {
             logger.warn(`No date found in tournament header, using current date`);
         }
-        
+
         const nameMatch = headerHtml.match(/<h4>(.*?)<\/h4>/);
         let tournamentName = nameMatch ? nameMatch[1].trim() : '';
 
         const sectionHeader = $(table).prevAll('h3').first().text().toLowerCase();
         const competitionType = sectionHeader.includes('družstva') ? 'team' : 'individual';
-        const matchType = sectionHeader.includes('čtyřhra') ? 'doubles' : 'singles';
 
         $(table).find('tbody tr').each((_, row) => {
             const cols = $(row).find('td');
@@ -104,6 +103,11 @@ export function parseMatches(html: string, scrapedPlayerId: number): ParsedMatch
             const meInLeft = leftPlayers.some(p => p.isMe);
             const meInRight = rightPlayers.some(p => p.isMe);
             if (!meInLeft && !meInRight) return;
+
+            // Detect match type from number of players:
+            // Singles: 1 player per side (1 <a> tag)
+            // Doubles: 2 players per side (2 <a> tags)
+            const matchType = (leftPlayers.length === 2 && rightPlayers.length === 2) ? 'doubles' : 'singles';
 
             // Determine winner from score, not from position!
             // Score format: "6:3, 6:4" where first number is left player's games
