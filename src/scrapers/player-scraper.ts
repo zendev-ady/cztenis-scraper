@@ -187,6 +187,7 @@ export class PlayerScraper {
                                 winnerId: match.isWinner ? playerId : match.opponentId,
                                 pointsEarned: match.pointsEarned,
                                 matchDate: match.tournamentDate,
+                                seasonCode: season.value,
                             });
 
                             logger.debug(`Successfully saved match: ${playerId} vs ${match.opponentId} in tournament ${match.tournamentId}`);

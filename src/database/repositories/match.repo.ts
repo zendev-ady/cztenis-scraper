@@ -140,10 +140,10 @@ export class MatchRepository {
 
         if (pageSeason) {
             // Only return matches from the specified season
-            conditions.push(eq(tournaments.seasonCode, pageSeason));
+            conditions.push(eq(matches.seasonCode, pageSeason));
         } else if (seasons && seasons.length > 0) {
             // If no pageSeason but seasons filter exists, use first season
-            conditions.push(eq(tournaments.seasonCode, seasons[0]));
+            conditions.push(eq(matches.seasonCode, seasons[0]));
         }
 
         return db.select({
@@ -179,18 +179,18 @@ export class MatchRepository {
         }
 
         if (seasons && seasons.length > 0) {
-            conditions.push(inArray(tournaments.seasonCode, seasons));
+            conditions.push(inArray(matches.seasonCode, seasons));
         }
 
         const result = await db.select({
-            seasonCode: tournaments.seasonCode,
+            seasonCode: matches.seasonCode,
             matchCount: sql<number>`COUNT(*)`,
         })
         .from(matches)
         .leftJoin(tournaments, eq(matches.tournamentId, tournaments.id))
         .where(and(...conditions))
-        .groupBy(tournaments.seasonCode)
-        .orderBy(desc(tournaments.seasonCode))
+        .groupBy(matches.seasonCode)
+        .orderBy(desc(matches.seasonCode))
         .all();
 
         return result

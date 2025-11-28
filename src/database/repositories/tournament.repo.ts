@@ -11,7 +11,7 @@ export class TournamentRepository {
                 set: {
                     name: data.name,
                     date: data.date,
-                    seasonCode: data.seasonCode,
+                    // seasonCode is immutable - don't overwrite on re-scraping
                 },
             })
             .run();

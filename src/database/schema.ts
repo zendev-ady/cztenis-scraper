@@ -81,6 +81,7 @@ export const matches = sqliteTable('matches', {
     pointsEarned: integer('points_earned'),
 
     matchDate: integer('match_date', { mode: 'timestamp' }),
+    seasonCode: text('season_code').references(() => seasons.code),
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
     tournamentIdx: index('idx_matches_tournament').on(table.tournamentId),
@@ -88,6 +89,7 @@ export const matches = sqliteTable('matches', {
     player2Idx: index('idx_matches_player2').on(table.player2Id),
     winnerIdx: index('idx_matches_winner').on(table.winnerId),
     dateIdx: index('idx_matches_date').on(table.matchDate),
+    seasonIdx: index('idx_matches_season').on(table.seasonCode),
     typeIdx: index('idx_matches_type').on(table.matchType, table.competitionType),
     // Unique constraint: one match per tournament/round/players/matchType combination
     uniqueMatch: unique().on(table.tournamentId, table.round, table.player1Id, table.player2Id, table.matchType),
