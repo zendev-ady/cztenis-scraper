@@ -66,6 +66,31 @@ export default function PlayerPage() {
     }
   }, []);
 
+  // Helper function to sort seasons from newest to oldest
+  const sortSeasons = (seasons: Season[]): Season[] => {
+    return [...seasons].sort((a, b) => {
+      // Parse season codes (e.g., "2026", "2025-L", "2025-Z")
+      const parseSeasonCode = (code: string): { year: number; suffix: string } => {
+        const parts = code.split('-');
+        return {
+          year: parseInt(parts[0]),
+          suffix: parts[1] || '', // empty string if no suffix
+        };
+      };
+
+      const aParsed = parseSeasonCode(a.code);
+      const bParsed = parseSeasonCode(b.code);
+
+      // Sort by year descending
+      if (aParsed.year !== bParsed.year) {
+        return bParsed.year - aParsed.year;
+      }
+
+      // If same year, sort by suffix descending (Z > L)
+      return bParsed.suffix.localeCompare(aParsed.suffix);
+    });
+  };
+
   // Fetch player data and seasons
   useEffect(() => {
     if (!id) return;
@@ -81,11 +106,14 @@ export default function PlayerPage() {
         ]);
 
         setPlayerData(playerResult);
-        setSeasons(seasonsResult.seasons);
+
+        // Sort seasons from newest to oldest
+        const sortedSeasons = sortSeasons(seasonsResult.seasons);
+        setSeasons(sortedSeasons);
 
         // Initialize selected seasons if not set from URL
         if (selectedSeasons.length === 0) {
-          setSelectedSeasons(seasonsResult.seasons.map(s => s.code));
+          setSelectedSeasons(sortedSeasons.map(s => s.code));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Chyba při načítání dat hráče');
