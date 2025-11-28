@@ -10,5 +10,5 @@ if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const sqlite = new Database(path.join(dataDir, 'cztenis.db'));
+export const sqlite = new Database(path.join(dataDir, 'cztenis.db'));
 export const db = drizzle(sqlite, { schema });

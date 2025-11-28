@@ -12,50 +12,31 @@ A TypeScript-based web scraper for Czech tennis data from cztenis.cz. This proje
 - Player rankings tracking
 - CLI interface for scraping operations and database verification
 
-## Installation
+## 🚀 Quick Start
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd cztenis-scraper
-```
+### 1. Installation
 
-2. Install dependencies:
 ```bash
+# Install dependencies
 npm install
-```
 
-3. Install Playwright browsers:
-```bash
+# Install browser binaries for Playwright
 npx playwright install
 ```
 
-4. Set up the database:
+### 2. Database Setup
+
+Initialize the SQLite database:
+
 ```bash
-npm run db:generate  # Generate database migrations
-npm run db:migrate   # Apply migrations to create tables
+npm run db:push
 ```
 
-## Usage
+### 3. Run
 
-### Quick Start
+You can run the scraper or the API server.
 
-**Option 1: Run API Server** (for web app development):
-```bash
-npm start
-```
-The API server will be available at `http://localhost:3001`
-
-**Option 2: Run Scraper** (to collect data):
-```bash
-npm run scrape start
-```
-
----
-
-## API Server
-
-### Starting the Server
+**Start the API Server:**
 
 Start the API server to provide data to the web frontend:
 
@@ -63,170 +44,65 @@ Start the API server to provide data to the web frontend:
 npm start
 # or
 npm run api
+# Server runs at http://localhost:3001
 ```
 
-The server runs on **http://localhost:3001**
-
-### Available Endpoints
-
-- `GET /health` - Health check endpoint
-- `GET /api/players/search?q=name` - Search for players by name
-- `GET /api/players/:id` - Get player details by ID
-- `GET /api/matches?playerId=123` - Get matches for a specific player
-- `GET /api/h2h?player1Id=123&player2Id=456` - Get head-to-head statistics
-
-**Example requests:**
+**Start Scraping:**
 ```bash
-# Health check
-curl http://localhost:3001/health
-
-# Search for a player
-curl http://localhost:3001/api/players/search?q=novak
-
-# Get player details
-curl http://localhost:3001/api/players/1026900
-
-# Get player matches
-curl http://localhost:3001/api/matches?playerId=1026900
-
-# Get H2H statistics
-curl http://localhost:3001/api/h2h?player1Id=1026900&player2Id=1026901
+# Scrape a specific player (ID 1026900), depth 1 (opponents), max 10 players
+npm run scrape start 1026900 1 10
 ```
-
----
 
 ## Scraper
-
-### Starting the Scraper
 
 Scrape data from cztenis.cz and store it in the database:
 
 ```bash
-# Start processing the queue
-npm run scrape start
-
-# Add a specific player to the queue and start scraping
-npm run scrape start 1026900
-# or
-npm run scrape start --player 1026900
+npm run scrape start <playerId> <maxDepth> <limit>
 ```
 
-### Depth-Limited Scraping
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `playerId` | ID from cztenis.cz URL (e.g., `1026900`) | Required for new scrape |
+| `maxDepth` | `0`=Player only, `1`=Opponents, `-1`=Unlimited | `-1` |
+| `limit` | Max players to process (`-1` = unlimited) | `-1` |
 
-Control how deeply the scraper crawls through the player network using the `--max-depth` option:
 
-**Easy method (recommended for Windows):** Use pre-configured npm scripts:
 
-```bash
-# Scrape only the specified player (no opponents)
-npm run scrape:depth0 1026900
-
-# Scrape the player and their direct opponents only
-npm run scrape:depth1 1026900
-
-# Scrape the player, their opponents, and opponents' opponents
-npm run scrape:depth2 1026900
-
-# Unlimited depth (scrapes entire connected network)
-npm run scrape:unlimited 1026900
-```
-
-**Alternative methods:**
+### Common Commands
 
 ```bash
-# Using npm with -- separator (Linux/macOS)
-npm run scrape -- start 1026900 --max-depth 1
-
-# Using npx directly (works on all platforms)
-npx tsx src/cli/scrape.ts start 1026900 --max-depth 1
-```
-
-**Depth levels explained:**
-- `depth 0`: Only the manually specified player
-- `depth 1`: The player + all their opponents (typically 5-50 players)
-- `depth 2`: All of the above + opponents of opponents (hundreds of players)
-- `depth -1`: Unlimited (entire connected network, potentially thousands of players)
-
-**Use cases:**
-- **Testing**: Use `--max-depth 0` or `--max-depth 1` for quick testing
-- **Targeted scraping**: Use `--max-depth 1` to get a player and their immediate competition
-- **Full dataset**: Use `--max-depth -1` for production scraping of the entire network
-
-### Queue Management
-
-Check the current queue status and depth distribution:
-
-```bash
+# Check Queue Status
 npm run queue-status
-```
 
-Reset failed items in the queue back to pending status:
-
-```bash
+# Retry Failed Items
 npm run scrape reset-queue
-```
 
-Clear the entire scrape queue (use before testing to ensure clean state):
-
-```bash
+# Clear Queue (use before new scrape)
 npm run scrape clear-queue
 ```
 
-**Important:** Always clear the queue before testing depth limits to avoid interference from previously queued players.
+## Database Management
 
-### Database Verification
-
-Check the database contents and verify scraping results:
+### Verify Data
+Check what's currently in your database:
 
 ```bash
-npm run verify-db
+npx tsx src/cli/verify-db.ts
 ```
 
-### Database Operations
+### Reset Database
+**WARNING:** This deletes ALL data!
+1. Deletes the database file (`data/cztenis.db`)
+2. Recreates the schema automatically
+3. Leaves you with a clean, empty database
 
-Generate new migrations after schema changes:
 ```bash
-npm run db:generate
-```
+# Clear DB and recreate schema
+npm run scrape clear-db -- --force
 
-Apply pending migrations:
-```bash
-npm run db:migrate
-```
-
-Push schema changes directly to database (development only):
-```bash
-npm run db:push
-```
-
-## Project Structure
-
-```
-cztenis-scraper/
-├── src/
-│   ├── cli/                    # CLI commands
-│   │   ├── scrape.ts          # Scraping commands
-│   │   └── verify-db.ts       # Database verification
-│   ├── database/              # Database layer
-│   │   ├── migrations/        # Database migrations
-│   │   ├── repositories/      # Data access objects
-│   │   ├── schema.ts          # Database schema definition
-│   │   └── index.ts           # Database connection
-│   ├── scrapers/              # Web scraping logic
-│   │   ├── parsers/           # HTML parsers
-│   │   └── player-scraper.ts  # Player data scraper
-│   ├── services/              # Business logic
-│   │   └── queue-manager.ts   # Queue management
-│   ├── types/                 # TypeScript type definitions
-│   ├── utils/                 # Utility functions
-│   │   ├── logger.ts          # Logging configuration
-│   │   └── score-parser.ts    # Score parsing utilities
-│   └── config.ts              # Application configuration
-├── data/                      # Database file location
-├── drizzle.config.ts          # Drizzle ORM configuration
-├── package.json
-├── tsconfig.json
-└── README.md
+# Or use tsx directly
+npx tsx src/cli/scrape.ts clear-db --force
 ```
 
 ## Database Schema
@@ -265,20 +141,11 @@ Other configuration options are available in `src/config.ts`:
 - Base URL for scraping
 - User agent string
 
-## Development
+## 🔌 API Endpoints
 
-To run the application in development mode:
-
-```bash
-npm start
-```
-
-To run tests:
-
-```bash
-npm test
-```
-
-## License
-
-ISC
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/players/search?q=...` | Search players by name |
+| `GET` | `/api/players/:id` | Get full player profile |
+| `GET` | `/api/matches?playerId=...` | Get match history |
+| `GET` | `/api/h2h?player1Id=...` | Get H2H stats between two players |
