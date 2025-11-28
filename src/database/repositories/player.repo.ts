@@ -1,22 +1,64 @@
 import { eq, like, sql, or, inArray, and, desc } from 'drizzle-orm';
 import { db } from '../index';
 import { players, matches, tournaments } from '../schema';
+import { logger } from '../../utils/logger';
 
 export class PlayerRepository {
     async upsert(data: typeof players.$inferInsert) {
-        return db.insert(players)
-            .values(data)
-            .onConflictDoUpdate({
-                target: players.id,
-                set: {
-                    name: data.name,
-                    birthYear: data.birthYear,
-                    currentClub: data.currentClub,
-                    registrationValidUntil: data.registrationValidUntil,
-                    updatedAt: new Date(),
-                },
-            })
-            .run();
+        logger.debug(`Upserting player: id=${data.id}, name=${data.name}, firstName=${data.firstName}, lastName=${data.lastName}`);
+        
+        // Check if player exists first
+        const existing = await this.findById(data.id);
+        
+        if (existing) {
+            // Update: only update fields if new value is "better" or field is empty
+            const hasNewFullName = data.name?.includes(' ');
+            const hasExistingFullName = existing.name?.includes(' ');
+            
+            const updateData: Partial<typeof players.$inferInsert> = {
+                updatedAt: new Date(),
+            };
+            
+            // Only update name if new name has firstName (contains space) or existing doesn't
+            if (hasNewFullName || !hasExistingFullName) {
+                updateData.name = data.name;
+            }
+            
+            // Only update firstName if provided and existing is empty
+            if (data.firstName && !existing.firstName) {
+                updateData.firstName = data.firstName;
+            } else if (data.firstName) {
+                updateData.firstName = data.firstName;
+            }
+            
+            // Only update lastName if provided and existing is empty
+            if (data.lastName && !existing.lastName) {
+                updateData.lastName = data.lastName;
+            } else if (data.lastName) {
+                updateData.lastName = data.lastName;
+            }
+            
+            // Only update other fields if provided
+            if (data.birthYear !== undefined && data.birthYear !== null) {
+                updateData.birthYear = data.birthYear;
+            }
+            if (data.currentClub !== undefined && data.currentClub !== null) {
+                updateData.currentClub = data.currentClub;
+            }
+            if (data.registrationValidUntil !== undefined && data.registrationValidUntil !== null) {
+                updateData.registrationValidUntil = data.registrationValidUntil;
+            }
+            
+            return db.update(players)
+                .set(updateData)
+                .where(eq(players.id, data.id))
+                .run();
+        } else {
+            // Insert new player
+            return db.insert(players)
+                .values(data)
+                .run();
+        }
     }
 
     async updateLastScraped(id: number) {

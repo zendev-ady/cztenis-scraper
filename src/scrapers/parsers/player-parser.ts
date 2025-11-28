@@ -2,9 +2,32 @@ import * as cheerio from 'cheerio';
 
 export interface ParsedPlayerInfo {
     name: string;
+    firstName?: string;
+    lastName?: string;
     birthYear?: number;
     currentClub?: string;
     registrationValidUntil?: Date;
+}
+
+/**
+ * Parse full name into firstName and lastName
+ * CZTenis format: "Příjmení Jméno" (e.g., "Novák Jan")
+ */
+export function parsePlayerName(fullName: string): { firstName?: string; lastName?: string } {
+    const trimmed = fullName.trim();
+    if (!trimmed) return {};
+    
+    const parts = trimmed.split(/\s+/);
+    if (parts.length === 1) {
+        // Only last name (common in doubles)
+        return { lastName: parts[0] };
+    }
+    
+    // Format is "Příjmení Jméno" - first part is lastName, rest is firstName
+    const lastName = parts[0];
+    const firstName = parts.slice(1).join(' ');
+    
+    return { firstName, lastName };
 }
 
 export function parsePlayerProfile(html: string): ParsedPlayerInfo {
@@ -12,6 +35,7 @@ export function parsePlayerProfile(html: string): ParsedPlayerInfo {
 
     // Name: div.row div.span12 h2
     const name = $('div.row div.span12 h2').text().trim();
+    const { firstName, lastName } = parsePlayerName(name);
 
     // Table info
     let birthYear: number | undefined;
@@ -37,6 +61,8 @@ export function parsePlayerProfile(html: string): ParsedPlayerInfo {
 
     return {
         name,
+        firstName,
+        lastName,
         birthYear,
         currentClub,
         registrationValidUntil,
