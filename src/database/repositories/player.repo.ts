@@ -1,4 +1,4 @@
-import { eq, like, sql, or, inArray, and } from 'drizzle-orm';
+import { eq, like, sql, or, inArray, and, desc } from 'drizzle-orm';
 import { db } from '../index';
 import { players, matches, tournaments } from '../schema';
 
@@ -93,6 +93,7 @@ export class PlayerRepository {
         .leftJoin(tournaments, eq(matches.tournamentId, tournaments.id))
         .where(and(...conditions))
         .groupBy(tournaments.seasonCode)
+        .orderBy(desc(tournaments.seasonCode))
         .all();
 
         // Filter out null season codes and format response

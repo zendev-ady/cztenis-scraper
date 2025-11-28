@@ -80,8 +80,8 @@ function validateSet(setScore: string, setNumber: number): { errors: string[]; w
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Pattern for set score: "6:3" or "7:6 (3)" or "1:0 (7)"
-  const setPattern = /^(\d+):(\d+)(?:\s*\((\d+)\))?$/;
+  // Pattern for set score: "6:3" or "7:6 (3)" or "1:0 (7)" or "6:7 ()" (empty tiebreak)
+  const setPattern = /^(\d+):(\d+)(?:\s*\((\d*)\))?$/;
   const match = setScore.match(setPattern);
 
   if (!match) {
@@ -91,7 +91,7 @@ function validateSet(setScore: string, setNumber: number): { errors: string[]; w
 
   const games1 = parseInt(match[1], 10);
   const games2 = parseInt(match[2], 10);
-  const tiebreak = match[3] ? parseInt(match[3], 10) : undefined;
+  const tiebreak = match[3] && match[3] !== '' ? parseInt(match[3], 10) : undefined;
 
   // Validate game counts
   if (games1 < 0 || games2 < 0) {
@@ -100,6 +100,11 @@ function validateSet(setScore: string, setNumber: number): { errors: string[]; w
 
   if (games1 > 20 || games2 > 20) {
     warnings.push(`Set ${setNumber}: Unusually high game count (${games1}:${games2})`);
+  }
+
+  // Check if tiebreak notation exists but is empty
+  if (match[3] === '') {
+    warnings.push(`Set ${setNumber}: Tiebreak score missing for ${games1}:${games2}`);
   }
 
   // Check for tiebreak scenarios

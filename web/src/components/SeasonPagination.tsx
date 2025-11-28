@@ -31,15 +31,17 @@ export default function SeasonPagination({
     return `${prevYear}/${code}`;
   };
 
-  const handlePrev = () => {
-    if (hasPrev && currentIndex < availableSeasons.length - 1) {
-      onSeasonChange(availableSeasons[currentIndex + 1]);
+  // Navigate to newer season (lower index, more recent)
+  const handleNewer = () => {
+    if (hasNext && currentIndex > 0) {
+      onSeasonChange(availableSeasons[currentIndex - 1]);
     }
   };
 
-  const handleNext = () => {
-    if (hasNext && currentIndex > 0) {
-      onSeasonChange(availableSeasons[currentIndex - 1]);
+  // Navigate to older season (higher index, less recent)
+  const handleOlder = () => {
+    if (hasPrev && currentIndex < availableSeasons.length - 1) {
+      onSeasonChange(availableSeasons[currentIndex + 1]);
     }
   };
 
@@ -51,19 +53,21 @@ export default function SeasonPagination({
   return (
     <div className="mt-6 pt-6 border-t border-gray-200">
       <div className="flex items-center justify-between">
+        {/* Left: Newer season button */}
         <button
-          onClick={handlePrev}
-          disabled={!hasPrev}
+          onClick={handleNewer}
+          disabled={!hasNext}
           className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-            hasPrev
+            hasNext
               ? 'text-blue-600 hover:bg-blue-50'
               : 'text-gray-400 cursor-not-allowed'
           }`}
         >
           <span className="mr-2">←</span>
-          Starší
+          Novější
         </button>
 
+        {/* Center: Current season info */}
         <div className="text-center">
           <div className="text-sm font-medium text-gray-900">
             Sezóna {formatSeasonLabel(displayedSeason)}
@@ -73,16 +77,17 @@ export default function SeasonPagination({
           </div>
         </div>
 
+        {/* Right: Older season button */}
         <button
-          onClick={handleNext}
-          disabled={!hasNext}
+          onClick={handleOlder}
+          disabled={!hasPrev}
           className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-            hasNext
+            hasPrev
               ? 'text-blue-600 hover:bg-blue-50'
               : 'text-gray-400 cursor-not-allowed'
           }`}
         >
-          Novější
+          Starší
           <span className="ml-2">→</span>
         </button>
       </div>
