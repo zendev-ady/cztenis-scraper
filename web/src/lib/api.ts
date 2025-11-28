@@ -77,7 +77,7 @@ export interface H2HData {
   player1: Player;
   player2: Player;
   stats: H2HStats;
-  matches: Match[];
+  matches: MatchWithTournament[];
 }
 
 export interface Season {
@@ -146,8 +146,17 @@ export async function getMatches(
   return res.json();
 }
 
-export async function getH2H(player1Id: number, player2Id: number): Promise<H2HData> {
-  const res = await fetch(`${API_BASE}/h2h?player1Id=${player1Id}&player2Id=${player2Id}`);
+export async function getH2H(
+  player1Id: number,
+  player2Id: number,
+  matchType: 'all' | 'singles' | 'doubles' = 'all'
+): Promise<H2HData> {
+  const params = new URLSearchParams({
+    player1Id: String(player1Id),
+    player2Id: String(player2Id),
+    matchType: matchType,
+  });
+  const res = await fetch(`${API_BASE}/h2h?${params}`);
   if (!res.ok) {
     throw new Error(`Failed to get H2H: ${res.statusText}`);
   }
