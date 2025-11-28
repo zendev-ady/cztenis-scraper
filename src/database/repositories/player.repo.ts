@@ -1,6 +1,6 @@
-import { eq, like, sql, or } from 'drizzle-orm';
+import { eq, like, sql, or, inArray, and } from 'drizzle-orm';
 import { db } from '../index';
-import { players, matches } from '../schema';
+import { players, matches, tournaments } from '../schema';
 
 export class PlayerRepository {
     async upsert(data: typeof players.$inferInsert) {
@@ -69,6 +69,103 @@ export class PlayerRepository {
                 wins: matchStats?.wins || 0,
                 losses: (matchStats?.totalMatches || 0) - (matchStats?.wins || 0),
             }
+        };
+    }
+
+    async getSeasons(playerId: number, matchType?: 'all' | 'singles' | 'doubles') {
+        // Get all seasons where player has matches
+        const conditions = [
+            or(
+                eq(matches.player1Id, playerId),
+                eq(matches.player2Id, playerId)
+            )
+        ];
+
+        if (matchType && matchType !== 'all') {
+            conditions.push(eq(matches.matchType, matchType));
+        }
+
+        const result = await db.select({
+            seasonCode: tournaments.seasonCode,
+            matchCount: sql<number>`COUNT(*)`,
+        })
+        .from(matches)
+        .leftJoin(tournaments, eq(matches.tournamentId, tournaments.id))
+        .where(and(...conditions))
+        .groupBy(tournaments.seasonCode)
+        .all();
+
+        // Filter out null season codes and format response
+        return result
+            .filter(r => r.seasonCode !== null)
+            .map(r => ({
+                code: r.seasonCode!,
+                matchCount: r.matchCount || 0,
+            }));
+    }
+
+    async getFilteredStats(
+        playerId: number,
+        options: {
+            seasons?: string[],
+            matchType?: 'all' | 'singles' | 'doubles'
+        } = {}
+    ) {
+        const { seasons, matchType } = options;
+
+        // Build where conditions
+        const conditions = [
+            or(
+                eq(matches.player1Id, playerId),
+                eq(matches.player2Id, playerId)
+            )
+        ];
+
+        if (matchType && matchType !== 'all') {
+            conditions.push(eq(matches.matchType, matchType));
+        }
+
+        if (seasons && seasons.length > 0) {
+            conditions.push(inArray(tournaments.seasonCode, seasons));
+        }
+
+        // Get statistics
+        const stats = await db.select({
+            totalMatches: sql<number>`COUNT(*)`,
+            wins: sql<number>`SUM(CASE WHEN ${matches.winnerId} = ${playerId} THEN 1 ELSE 0 END)`,
+        })
+        .from(matches)
+        .leftJoin(tournaments, eq(matches.tournamentId, tournaments.id))
+        .where(and(...conditions))
+        .get();
+
+        const totalMatches = stats?.totalMatches || 0;
+        const wins = stats?.wins || 0;
+        const losses = totalMatches - wins;
+        const winRate = totalMatches > 0 ? Number(((wins / totalMatches) * 100).toFixed(2)) : 0;
+
+        // Get recent form (last 5 matches)
+        const recentMatches = await db.select({
+            winnerId: matches.winnerId,
+            matchDate: matches.matchDate,
+        })
+        .from(matches)
+        .leftJoin(tournaments, eq(matches.tournamentId, tournaments.id))
+        .where(and(...conditions))
+        .orderBy(sql`${matches.matchDate} DESC`)
+        .limit(5)
+        .all();
+
+        const recentForm = recentMatches.map(m =>
+            m.winnerId === playerId ? 'W' : 'L'
+        );
+
+        return {
+            totalMatches,
+            wins,
+            losses,
+            winRate,
+            recentForm,
         };
     }
 }
