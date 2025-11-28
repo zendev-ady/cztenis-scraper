@@ -80,6 +80,33 @@ export interface H2HData {
   matches: Match[];
 }
 
+export interface Season {
+  code: string;
+  matchCount: number;
+}
+
+export interface FilteredPlayerStats {
+  totalMatches: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  recentForm: string[];
+}
+
+export interface PaginationInfo {
+  availableSeasons: string[];
+  currentIndex: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+}
+
+export interface PlayerMatchesResponse {
+  matches: MatchWithTournament[];
+  displayedSeason: string | null;
+  pagination: PaginationInfo;
+  stats: FilteredPlayerStats;
+}
+
 export async function searchPlayers(query: string, limit: number = 10): Promise<{ players: Player[] }> {
   const res = await fetch(`${API_BASE}/players/search?q=${encodeURIComponent(query)}&limit=${limit}`);
   if (!res.ok) {
@@ -123,6 +150,45 @@ export async function getH2H(player1Id: number, player2Id: number): Promise<H2HD
   const res = await fetch(`${API_BASE}/h2h?player1Id=${player1Id}&player2Id=${player2Id}`);
   if (!res.ok) {
     throw new Error(`Failed to get H2H: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function getPlayerSeasons(
+  playerId: number,
+  matchType: 'all' | 'singles' | 'doubles' = 'all'
+): Promise<{ seasons: Season[] }> {
+  const res = await fetch(`${API_BASE}/players/${playerId}/seasons?type=${matchType}`);
+  if (!res.ok) {
+    throw new Error(`Failed to get player seasons: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function getPlayerMatches(
+  playerId: number,
+  options: {
+    seasons?: string[];
+    type?: 'all' | 'singles' | 'doubles';
+    season?: string;
+  } = {}
+): Promise<PlayerMatchesResponse> {
+  const params = new URLSearchParams();
+
+  if (options.seasons && options.seasons.length > 0) {
+    params.append('seasons', options.seasons.join(','));
+  }
+  if (options.type) {
+    params.append('type', options.type);
+  }
+  if (options.season) {
+    params.append('season', options.season);
+  }
+
+  const url = `${API_BASE}/players/${playerId}/matches${params.toString() ? `?${params}` : ''}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to get player matches: ${res.statusText}`);
   }
   return res.json();
 }

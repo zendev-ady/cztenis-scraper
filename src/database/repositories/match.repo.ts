@@ -1,4 +1,4 @@
-import { eq, and, or, sql, desc, gte } from 'drizzle-orm';
+import { eq, and, or, sql, desc, gte, inArray } from 'drizzle-orm';
 import { db } from '../index';
 import { matches, tournaments } from '../schema';
 import { logger } from '../../utils/logger';
@@ -113,5 +113,87 @@ export class MatchRepository {
             )
             .orderBy(desc(matches.matchDate))
             .all();
+    }
+
+    async findByPlayerIdWithSeasonFilters(
+        playerId: number,
+        options: {
+            seasons?: string[],
+            matchType?: 'all' | 'singles' | 'doubles',
+            pageSeason?: string
+        } = {}
+    ) {
+        const { seasons, matchType, pageSeason } = options;
+
+        // Build where conditions
+        const conditions = [
+            or(
+                eq(matches.player1Id, playerId),
+                eq(matches.player2Id, playerId)
+            )
+        ];
+
+        if (matchType && matchType !== 'all') {
+            conditions.push(eq(matches.matchType, matchType));
+        }
+
+        if (pageSeason) {
+            // Only return matches from the specified season
+            conditions.push(eq(tournaments.seasonCode, pageSeason));
+        } else if (seasons && seasons.length > 0) {
+            // If no pageSeason but seasons filter exists, use first season
+            conditions.push(eq(tournaments.seasonCode, seasons[0]));
+        }
+
+        return db.select({
+            match: matches,
+            tournament: tournaments,
+        })
+        .from(matches)
+        .leftJoin(tournaments, eq(matches.tournamentId, tournaments.id))
+        .where(and(...conditions))
+        .orderBy(desc(matches.matchDate))
+        .all();
+    }
+
+    async getAvailableSeasons(
+        playerId: number,
+        options: {
+            seasons?: string[],
+            matchType?: 'all' | 'singles' | 'doubles'
+        } = {}
+    ) {
+        const { seasons, matchType } = options;
+
+        // Build where conditions
+        const conditions = [
+            or(
+                eq(matches.player1Id, playerId),
+                eq(matches.player2Id, playerId)
+            )
+        ];
+
+        if (matchType && matchType !== 'all') {
+            conditions.push(eq(matches.matchType, matchType));
+        }
+
+        if (seasons && seasons.length > 0) {
+            conditions.push(inArray(tournaments.seasonCode, seasons));
+        }
+
+        const result = await db.select({
+            seasonCode: tournaments.seasonCode,
+            matchCount: sql<number>`COUNT(*)`,
+        })
+        .from(matches)
+        .leftJoin(tournaments, eq(matches.tournamentId, tournaments.id))
+        .where(and(...conditions))
+        .groupBy(tournaments.seasonCode)
+        .orderBy(desc(tournaments.seasonCode))
+        .all();
+
+        return result
+            .filter(r => r.seasonCode !== null)
+            .map(r => r.seasonCode!);
     }
 }
