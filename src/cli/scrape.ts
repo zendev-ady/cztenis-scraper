@@ -4,7 +4,7 @@ import { PlayerScraper } from '../scrapers/player-scraper';
 import { PlayerRepository } from '../database/repositories/player.repo';
 import { QualityMonitor } from '../services/quality-monitor';
 import { logger } from '../utils/logger';
-import { db } from '../database';
+import { db, sqlite } from '../database';
 import { scrapeQueue } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { config } from '../config';
@@ -15,12 +15,20 @@ program
     .command('start')
     .description('Start scraping from queue or add a player to scrape')
     .argument('[playerId]', 'Optional player ID to add to queue')
+    .argument('[maxDepth]', 'Optional maximum crawl depth')
+    .argument('[limit]', 'Optional maximum number of players')
     .option('--player <id>', 'Player ID to add to queue (alternative syntax)')
     .option('--max-depth <depth>', 'Maximum crawl depth (-1 = unlimited, 0 = only specified player, 1 = player + opponents, etc.)', '-1')
     .option('--limit <count>', 'Maximum number of players to scrape (-1 = unlimited)', '-1')
-    .action(async (playerId?: string, options?: { player?: string; maxDepth?: string; limit?: string }) => {
-        const maxDepth = parseInt(options?.maxDepth || '-1', 10);
-        const maxPlayers = parseInt(options?.limit || '-1', 10);
+    .action(async (playerId?: string, maxDepthArg?: string, limitArg?: string, options?: { player?: string; maxDepth?: string; limit?: string }) => {
+        // Resolve maxDepth: positional arg > option > default
+        // Note: options.maxDepth has a default value of '-1', so we need to check if maxDepthArg is provided
+        const maxDepthVal = maxDepthArg !== undefined ? maxDepthArg : (options?.maxDepth || '-1');
+        const maxDepth = parseInt(maxDepthVal, 10);
+
+        // Resolve limit: positional arg > option > default
+        const limitVal = limitArg !== undefined ? limitArg : (options?.limit || '-1');
+        const maxPlayers = parseInt(limitVal, 10);
 
         logger.info(`Starting HTTP-based scraper with max depth: ${maxDepth === -1 ? 'unlimited' : maxDepth}, limit: ${maxPlayers === -1 ? 'unlimited' : maxPlayers} players`);
 
@@ -120,6 +128,11 @@ program
             // Check if database exists
             if (fs.existsSync(dbPath)) {
                 logger.info(`Deleting database at ${dbPath}...`);
+
+                // Close database connection before deleting
+                logger.info('Closing database connection...');
+                sqlite.close();
+
                 fs.unlinkSync(dbPath);
                 logger.info('Database deleted successfully');
             } else {
